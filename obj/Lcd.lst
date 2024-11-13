@@ -1,0 +1,442 @@
+C251 COMPILER V5.60.0,  Lcd                                                                12/11/24  14:59:45  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE Lcd
+OBJECT MODULE PLACED IN .\obj\Lcd.obj
+COMPILER INVOKED BY: D:\KeilMDK\C251\BIN\C251.EXE Lcd\Lcd.c XSMALL OPTIMIZE(0,SPEED) BROWSE INCDIR(.\Ads1110;.\Flash;.\m
+                    -cp4725;.\IIC;.\MwPro;.\Uart;.\Lcd;.\ModBus;.\Probe;.\BSP;.\MwPro) PRINT(.\obj\Lcd.lst) OBJECT(.\obj\Lcd.obj) 
+
+stmt  level    source
+
+    1          //#include "pch.h"
+    2          
+    3          #include "main.h"
+    4          #include "Lcd.h"
+    5          #include "LcdApp.h"
+    6          #include "uart.h"
+    7          
+    8          //#include "SerialPort.h"
+    9          //#include "SampDemo.h"
+   10          //#include "SampDemoDlg.h"
+   11          
+   12          
+   13          #define UART_BUFF_LENGTH   MAX_LENGTH
+   14          
+   15          //#define Uart1Send ((CSampDemoDlg *)theApp.m_pMainWnd)->m_pSerialPort->WriteToPort
+   16          
+   17          
+   18          BYTE LcdFrameloc = 0;
+   19          BYTE RecLength1;
+   20          BYTE xdata SendBuf1[UART_BUFF_LENGTH] = {0};
+   21          BYTE xdata RecvBuf1[UART_BUFF_LENGTH] = {0};
+   22          BYTE DataIndex = 0;
+   23          
+   24          extern SYS_PARAM xdata SysParam;
+   25          
+   26          WORD SwWord(WORD input)
+   27          { 
+   28   1          //WORD temp=0;
+   29   1          //temp = ((input&0x00FF)<<8) |
+   30   1                 //((input&0xFF00)>>8);
+   31   1          //return temp;
+   32   1      
+   33   1          #ifdef BIG_EDTION
+   34   1          return input;
+   35   1          #else
+                   WORD temp=0;
+                   temp = ((input&0x00FF)<<8) |
+                          ((input&0xFF00)>>8);
+                   return temp;
+                   #endif
+   41   1      }
+   42          
+   43          
+   44          DWORD SwDWord(DWORD input)
+   45          { 
+   46   1          //DWORD temp=0;
+   47   1          //temp = ((input&0x000000FF)<<24) |
+   48   1                 //((input&0x0000FF00)<<8) |
+   49   1                 //((input&0x00FF0000)>>8) |
+   50   1                 //((input&0xFF000000)>>24);
+   51   1          //return temp;
+   52   1      
+   53   1          #ifdef BIG_EDTION
+   54   1          return input;
+   55   1          #else
+                   DWORD temp=0;
+                   temp = ((input&0x000000FF)<<24) |
+                          ((input&0x0000FF00)<<8) |
+C251 COMPILER V5.60.0,  Lcd                                                                12/11/24  14:59:45  PAGE 2   
+
+                          ((input&0x00FF0000)>>8) |
+                          ((input&0xFF000000)>>24);
+                   return temp;
+                   #endif
+   63   1      }
+   64          
+   65          
+   66          
+   67          //校验和计算
+   68          /*
+   69          WORD CRC16Calc(BYTE *dataBuff, WORD dataLen)
+   70          {
+   71              DWORD CRCResult = 0xFFFF;
+   72              WORD i,j;
+   73              
+   74              for (i = 0; i < dataLen; i++)
+   75              {
+   76                  CRCResult = CRCResult ^ dataBuff[i];
+   77                  for (j = 0; j < 8; j++)
+   78                  {
+   79                      if ((CRCResult & 1) == 1)
+   80                      {
+   81                          CRCResult = (CRCResult >> 1) ^ 0xA001;   // 0x8005 
+   82                      }
+   83                      else
+   84                      {
+   85                          CRCResult >>= 1;
+   86                      }
+   87                  }
+   88              }
+   89              
+   90              return (WORD)CRCResult;
+   91          }
+   92          */
+   93          
+   94          
+   95          BOOL LcdCmd(BYTE Cmd, WORD Addr, BYTE *Data, BYTE Length)
+   96          {
+   97   1          LCD_FRAME *head;
+   98   1          //WORD Sum;
+   99   1          
+  100   1          memset(SendBuf1, 0, UART_BUFF_LENGTH);
+  101   1          head = (LCD_FRAME*)SendBuf1;
+  102   1      
+  103   1          head->Head   = SwWord(LCD_HEAD);
+  104   1          head->Lenght = 3+Length; // + 命令1 + 校验2  （字节）
+  105   1          head->Cmd    = Cmd;
+  106   1          head->Addr   = SwWord(Addr);
+  107   1          
+  108   1          // data
+  109   1          if (Length > 0)
+  110   1          {
+  111   2              memcpy(&SendBuf1[6], Data, Length);
+  112   2          }
+  113   1      
+  114   1          #ifdef CRC_ENABLE
+                   // CRC ： 命令和数据
+                   Sum = SwWord(CRC16Calc(&SendBuf1[3], Length+5));
+                   memcpy(&SendBuf1[Length+6], (BYTE *)&Sum, 2);
+                   #endif
+  119   1      
+  120   1          DebugMsg(".");
+  121   1          Uart1Send(SendBuf1,(u8)(Length+6));
+  122   1          
+  123   1          //Delay(200);
+  124   1          return TRUE;
+C251 COMPILER V5.60.0,  Lcd                                                                12/11/24  14:59:45  PAGE 3   
+
+  125   1      }
+  126          
+  127          
+  128          
+  129          BOOL ValidLcdFrame()
+  130          {
+  131   1          // 有可能两个包黏在一起了
+  132   1          WORD rs = 0;
+  133   1          //WORD cs;
+  134   1          LCD_FRAME *pFrame;
+  135   1      
+  136   1          if ( (RecLength1 < 6) ||
+  137   1                (RecLength1 >= MAX_LENGTH) )   // 长度大于最大包长 或 小于 帧头长度
+  138   1          {
+  139   2              return FALSE;
+  140   2          }
+  141   1      
+  142   1          if (LcdFrameloc >= RecLength1)
+  143   1          {
+  144   2              LcdFrameloc = 0;
+  145   2              return FALSE;
+  146   2          }
+  147   1      
+  148   1          pFrame = (LCD_FRAME *)&RecvBuf1[LcdFrameloc];
+  149   1          if (pFrame->Head != SwWord(LCD_HEAD))
+  150   1          {
+  151   2              LcdFrameloc = 0;
+  152   2              return FALSE;
+  153   2          }
+  154   1      
+  155   1          #ifdef CRC_ENABLE
+                   cs = CRC16Calc(&RecvBuf1[3], pFrame->Lenght-2);
+                   memcpy((BYTE *)&rs, &RecvBuf1[RecLength1-2], 2);
+                   
+                   if (cs != rs)
+                   {
+                       return FALSE;
+                   }
+                   #endif
+  164   1      
+  165   1          return TRUE;
+  166   1      }
+  167          
+  168          
+  169          void ClearRevBuf()
+  170          {
+  171   1          memset(RecvBuf1, 0, UART_BUFF_LENGTH);
+  172   1          LcdFrameloc = 0;
+  173   1          RecLength1 = 0;
+  174   1      }
+  175          
+  176          
+  177          void HndLcdFrame()
+  178          {
+  179   1          LCD_FRAME *pFrame;
+  180   1          pFrame = (LCD_FRAME *)&RecvBuf1[LcdFrameloc];
+  181   1          switch(pFrame->Cmd)
+  182   1          {
+  183   2              case LCD_CMD_READ:  ReadReg();    break;
+  184   2              case LCD_CMD_WRITE: WriteReg();  break;
+  185   2          }
+  186   1      
+  187   1          LcdFrameloc += (pFrame->Lenght + 3);
+  188   1      }
+  189          
+  190          void HndLcdData()
+C251 COMPILER V5.60.0,  Lcd                                                                12/11/24  14:59:45  PAGE 4   
+
+  191          {
+  192   1          while (ValidLcdFrame())
+  193   1          {
+  194   2              DataIndex = 1;
+  195   2              HndLcdFrame();
+  196   2          }
+  197   1      
+  198   1          ClearRevBuf();
+  199   1      }
+  200          
+  201          
+  202          // 检查数据长度
+  203          bool CheckDataLen(BYTE Len)
+  204          {
+  205   1          LCD_FRAME *pFrame;
+  206   1          pFrame = (LCD_FRAME *)&RecvBuf1[LcdFrameloc];
+  207   1          if (Len != pFrame->Data[0])
+  208   1          {
+  209   2              return false;
+  210   2          }
+  211   1      
+  212   1          return true;
+  213   1      }
+  214          
+  215          
+  216          // 从数据中取一个Word
+  217          WORD PopWord()
+  218          {
+  219   1          WORD ret = 0;
+  220   1          LCD_FRAME *pFrame;
+  221   1          pFrame = (LCD_FRAME *)&RecvBuf1[LcdFrameloc];
+  222   1          
+  223   1          memcpy(&ret, &pFrame->Data[DataIndex], 2);
+  224   1          ret = SwWord(ret);
+  225   1          DataIndex += 2;
+  226   1          return ret;
+  227   1      }
+  228          
+  229          char *PopChar()
+  230          {
+  231   1          char *ret = NULL;
+  232   1          LCD_FRAME *pFrame;
+  233   1          pFrame = (LCD_FRAME *)&RecvBuf1[LcdFrameloc];
+  234   1      
+  235   1          sprintf(ret,(char*)pFrame->Data);
+  236   1          //memcpy(&ret, &pFrame->Data[DataIndex]);
+  237   1          //ret = SwWord(ret);
+  238   1          //DataIndex += 2;
+  239   1          return ret;
+  240   1      }
+  241          
+  242          
+  243          // 切换页面
+  244          void EnterPage(BYTE Page)
+  245          {
+  246   1          BYTE dt[4] = {0};
+  247   1          memcpy(dt, "\x5A\x01\x00\x00" , 4);
+  248   1          dt[3] = Page;
+  249   1          LcdCmd(LCD_CMD_WRITE, LCD_REG_PAGE, dt, 4);
+  250   1      }
+  251          
+  252          
+  253          
+  254          void GetLcdTime()
+  255          {
+  256   1          BYTE len = 4;
+C251 COMPILER V5.60.0,  Lcd                                                                12/11/24  14:59:45  PAGE 5   
+
+  257   1          NeedGetRet  = false;
+  258   1      
+  259   1          DebugMsg("GetTime\r\n");
+  260   1          LcdCmd(LCD_CMD_READ, LCD_REG_RTC, &len, 1);
+  261   1          
+  262   1          //Delay(200);
+  263   1          //HideModule(MP_HINT_END);
+  264   1          //Delay(200); 
+  265   1      }
+  266          
+  267          
+  268          void SetLcdTime()
+  269          {
+  270   1          LCD_DATE_TIME  ldt;
+  271   1          BYTE dt[8] = {0};
+  272   1          
+  273   1          if (!CheckDataLen(7))
+  274   1          {
+  275   2              return;
+  276   2          }
+  277   1      
+  278   1          ldt.YearH  = PopWord();
+  279   1          ldt.YearL  = PopWord();
+  280   1          ldt.Month  = PopWord();
+  281   1          ldt.Day    = PopWord();
+  282   1          ldt.Hour   = PopWord();
+  283   1          ldt.Minute = PopWord();
+  284   1          ldt.Secend = PopWord();
+  285   1      
+  286   1          dt[0] = 0x5A;
+  287   1          dt[1] = 0xA5;
+  288   1          dt[2] = (BYTE)(ldt.YearH*10+ldt.YearL);
+  289   1          dt[3] = (BYTE)ldt.Month;
+  290   1          dt[4] = (BYTE)ldt.Day;
+  291   1      
+  292   1          dt[5] = (BYTE)ldt.Hour;
+  293   1          dt[6] = (BYTE)ldt.Minute;
+  294   1          dt[7] = (BYTE)ldt.Secend;
+  295   1      
+  296   1          LcdCmd(LCD_CMD_WRITE, LCD_SET_RTC, dt, 8);
+  297   1          NeedGetRet = true;
+  298   1      }
+  299          
+  300          void SetBkLight(bool s)
+  301          {
+  302   1          BYTE dat[2] = {0};
+  303   1      
+  304   1          if (s)  //通过参数设置界面修改背光
+  305   1          {
+  306   2              SysParam.BkLight = (BYTE)PopWord();
+  307   2          }
+  308   1          dat[0] = SysParam.BkLight;
+  309   1          dat[1] = SysParam.BkLight / 2 ;  // 如果开启自动亮度：超时后亮度减半
+  310   1          LcdCmd(LCD_CMD_WRITE, LCD_REG_LIGHT, (BYTE *)dat, 2);
+  311   1      }
+  312          
+  313          // 修改数据整数位数
+  314          void SetTextIntegerNum(WORD mp, WORD Num)
+  315          {
+  316   1          LcdCmd(LCD_CMD_WRITE, mp+5, (BYTE *)&Num, 2);
+  317   1      }
+  318          
+  319          // 修改文本颜色
+  320          void SetTextColor(WORD mp, WORD color)
+  321          {
+  322   1          LcdCmd(LCD_CMD_WRITE, mp+3, (BYTE *)&color, 2);
+C251 COMPILER V5.60.0,  Lcd                                                                12/11/24  14:59:45  PAGE 6   
+
+  323   1      }
+  324          
+  325          
+  326          void HideControl()
+  327          {
+  328   1          BYTE dat[] = {0x5A,0xA5,00,01,0x0F,0x0D,00,00};
+  329   1          LcdCmd(LCD_CMD_WRITE, 0x00B0, (BYTE *)&dat, 8);
+  330   1      }
+  331          
+  332          void ShowControl()
+  333          {
+  334   1          BYTE dat[] = {0x5A,0xA5,00,01,0x0F,0x0D,00,01};
+  335   1          LcdCmd(LCD_CMD_WRITE, 0x00B0, (BYTE *)&dat, 8);
+  336   1      }
+  337          
+  338          
+  339          // 隐藏模组
+  340          void HideModule(WORD mp)
+  341          {
+  342   1          BYTE dat[2] = {0xFF, 00};
+  343   1          LcdCmd(LCD_CMD_WRITE, mp, (BYTE *)dat, 2);
+  344   1      }
+  345          
+  346          
+  347          // 显示模组
+  348          void ShowModule(WORD mp, WORD module)
+  349          {
+  350   1          WORD dat = SwWord(module);
+  351   1          LcdCmd(LCD_CMD_WRITE, mp, (BYTE *)&dat, 2);
+  352   1      }
+  353          
+  354          // 开始显示图标
+  355          void ShowIcon(WORD Mp,WORD Val)
+  356          {
+  357   1          //WORD dat = SwWord(Val);
+  358   1          LcdCmd(LCD_CMD_WRITE, Mp, (BYTE *)&Val, 2);
+  359   1      }
+  360          
+  361          
+  362          void ShowLightON()
+  363          {
+  364   1          BYTE dat[2] = {64,00};
+  365   1          LcdCmd(LCD_CMD_WRITE, 0x0082, (BYTE *)&dat, 2);
+  366   1      }
+  367          
+  368          
+  369          void ShowLight(WORD Light)
+  370          {
+  371   1          //BYTE dat[2] = {64,00};
+  372   1          WORD dat =SwWord(Light);
+  373   1          LcdCmd(LCD_CMD_WRITE, 0x0082, (BYTE *)&dat, 2);
+  374   1      }
+  375          
+  376          
+  377          //旋转指针
+  378          void ShowSpin(WORD degree)
+  379          {
+  380   1          WORD dat = SwWord(degree); 
+  381   1          LcdCmd(LCD_CMD_WRITE, REG_SPIN, (BYTE *)&dat, 2);
+  382   1      }
+  383          
+  384          //显示变量数据
+  385          void ShowVal(WORD *val)
+  386          {
+  387   1          BYTE i = 0;
+  388   1          WORD dat[SCALE_NUM];
+C251 COMPILER V5.60.0,  Lcd                                                                12/11/24  14:59:45  PAGE 7   
+
+  389   1          for(i = 0;i<SCALE_NUM;i++)
+  390   1          {
+  391   2              dat[i] = SwWord(*val++);
+  392   2          }
+  393   1          LcdCmd(LCD_CMD_WRITE, REG_SCALE_START, (BYTE *)&dat, 22);
+  394   1      }
+  395          
+  396          
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =      1358     ------
+  ecode size           =    ------     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =       400     ------
+  xdata-const size     =    ------     ------
+  edata size           =       156     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =       471     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

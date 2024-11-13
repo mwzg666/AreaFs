@@ -1,0 +1,1419 @@
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE main
+OBJECT MODULE PLACED IN .\obj\main.obj
+COMPILER INVOKED BY: D:\KeilMDK\C251\BIN\C251.EXE main.c XSMALL OPTIMIZE(0,SPEED) BROWSE INCDIR(.\Ads1110;.\Flash;.\mcp4
+                    -725;.\IIC;.\MwPro;.\Uart;.\Lcd;.\ModBus;.\Probe;.\BSP;.\MwPro) PRINT(.\obj\main.lst) OBJECT(.\obj\main.obj) 
+
+stmt  level    source
+
+    1          #include "main.h"
+    2          #include "mcp4725.h"
+    3          #include "Lcd.h"
+    4          #include "LcdApp.h"
+    5          #include "ModBusDev.h"
+    6          #include "ModBusHost.h"
+    7          #include "system.h"
+    8          #include "CalcDoseRate.h"
+    9          #include "i2c.h"
+   10          #include "uart.h"
+   11          #include "EepRom.h"
+   12          #include "MwPro.h"
+   13          #include "ModBus.h"
+   14          #include "PD_Probe.h"
+   15          #include "Sensor.h"
+   16          #include "cmd.h"
+   17          
+   18          BYTE code VERSION = 101;  // V1.0.0
+   19          
+   20          BYTE xdata StrTmp[64] = {0};
+   21          BYTE ChannelError[FLOW_METER_CNT] ={0};
+   22          
+   23          #define Log //((CSampDemoDlg *)theApp.m_pMainWnd)->AddLog
+   24          
+   25          #define PARAM_SIGN  0x3132
+   26          SYS_PARAM xdata SysParam;
+   27          RUN_STATUS xdata RunStatus;
+   28          PROBE_REGADDR xdata ProbeRegAddr;
+   29          
+   30          BYTE ProbeSwitch = 0;               //0:GM  1:NaI   2:PD
+   31          BYTE ProbeSwitch_State = 0;
+   32          
+   33          LP_SYSTEM_STTAE SysRunState={0};
+   34          BYTE Input_Status = 0;
+   35          u16 Eth_InitTim = 0;
+   36          bool Eth_Initflag = true;
+   37          
+   38          u16 SendPDTim = 0;
+   39          BYTE SendPDFlag = 0;
+   40          
+   41          BYTE MP3_StopFlag = 0;
+   42          BOOL AlarmConfirm_flag = false;
+   43          char Unit[8];
+   44          float My_PDDoserate = 0;
+   45          float My_Doserate = 0;
+   46          
+   47          
+   48          alt_u8 g_Output[OUT_IO_COUNT]      = {0,0,0,0};   // …œµÁ¬Ãµ∆¡¡ // 
+   49          alt_u8 g_OutStatus[OUT_IO_COUNT]   = {0,0,0,0};
+   50          
+   51          
+   52          extern u8  TX1_Cnt;    //∑¢ÀÕº∆ ˝
+   53          extern u8  RX1_Cnt;    //Ω” ’º∆ ˝
+   54          extern bit B_TX1_Busy; //∑¢ÀÕ√¶±Í÷æ
+   55          extern u16 Rx1_Timer;
+   56          
+   57          extern u8  TX2_Cnt;    //∑¢ÀÕº∆ ˝
+   58          extern u8  RX2_Cnt;    //Ω” ’º∆ ˝
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 2   
+
+   59          extern bit B_TX2_Busy; //∑¢ÀÕ√¶±Í÷æ
+   60          extern u16 Rx2_Timer;
+   61          
+   62          extern u8  RX3_Cnt;    //Ω” ’º∆ ˝
+   63          extern u8  TX3_Cnt;    //∑¢ÀÕº∆ ˝
+   64          extern bit B_TX3_Busy; //∑¢ÀÕ√¶±Í÷æ
+   65          extern u16 Rx3_Timer;
+   66          
+   67          extern u8  RX4_Cnt;    //Ω” ’º∆ ˝
+   68          extern u8  TX4_Cnt;    //∑¢ÀÕº∆ ˝
+   69          extern bit B_TX4_Busy; //∑¢ÀÕ√¶±Í÷æ
+   70          extern u16 Rx4_Timer;
+   71          
+   72          
+   73          extern u8  xdata RX2_Buffer[]; //Ω” ’ª∫≥Â
+   74          extern u8  xdata RX3_Buffer[]; //Ω” ’ª∫≥Â
+   75          
+   76          extern const NH_PARAM NhDef[NH_COUNT];
+   77          extern char code UnitText[3][8];
+   78          extern WORD xdata ScaleBuf[SCALE_NUM];
+   79          
+   80          
+   81          void DebugMsg(char *msg)
+   82          {
+   83   1          BYTE len = (BYTE)strlen(msg);
+   84   1          //Uart1Send((BYTE *)msg,len);
+   85   1      }
+   86          
+   87          void DebugInt(int msg)
+   88          {
+   89   1          memset(StrTmp,0,64);
+   90   1          sprintf(StrTmp,"%x\r\n",msg);
+   91   1          DebugMsg(StrTmp);
+   92   1      }
+   93          
+   94          void DumpCmd(BYTE *dat, BYTE len)
+   95          {
+   96   1          BYTE i;
+   97   1          memset(StrTmp,0,64);
+   98   1          for (i=0;i<len;i++)
+   99   1          {
+  100   2              if (strlen(StrTmp) >= 60)
+  101   2              {
+  102   3                  break;
+  103   3              }
+  104   2              sprintf(&StrTmp[i*3], "%02X ", dat[i]);
+  105   2          }
+  106   1          sprintf(&StrTmp[i*3], "\r\n");
+  107   1          DebugMsg(StrTmp);
+  108   1      }
+  109          
+  110          void Error()
+  111          {
+  112   1          while(1)
+  113   1          {
+  114   2              RUN_LED(1);
+  115   2              delay_ms(50);
+  116   2              RUN_LED(0);
+  117   2              delay_ms(50);
+  118   2          }
+  119   1          
+  120   1      }
+  121          
+  122          void IoInit()
+  123          {
+  124   1          EAXFR = 1;
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 3   
+
+  125   1          WTST = 0;  //…Ë÷√≥Ã–Ú÷∏¡Ó—” ±≤Œ ˝£¨∏≥÷µŒ™0ø…Ω´CPU÷¥––÷∏¡ÓµƒÀŸ∂»…Ë÷√Œ™◊ÓøÏ
+  126   1      
+  127   1          P0M1 = 0x50;      P0M0 = 0x00;  // P0.0 P0.1 P0.4 Õ∆ÕÏ ‰≥ˆ
+  128   1          P1M1 = 0x00;      P1M0 = 0x00;   //…Ë÷√Œ™◊ºÀ´œÚø⁄
+  129   1          P2M1 = 0x00;      P2M0 = 0x0F;   // P2.2 Õ∆ÕÏ ‰≥ˆ       P2M0 = 0xCF
+  130   1          P3M1 = 0x24;      P3M0 = 0x18;   //…Ë÷√Œ™◊ºÀ´œÚø⁄
+  131   1          P4M1 = 0x00;      P4M0 = 0x01;   //…Ë÷√Œ™◊ºÀ´œÚø⁄          P4M0 = 0x1F
+  132   1          P5M1 = 0x00;      P5M0 = 0x05;   //…Ë÷√Œ™◊ºÀ´œÚø⁄
+  133   1          P6M1 = 0xF0;      P6M0 = 0x00;   //…Ë÷√Œ™◊ºÀ´œÚø⁄
+  134   1          P7M1 = 0x00;      P7M0 = 0x01;   //…Ë÷√Œ™◊ºÀ´œÚø⁄          P7M0 = 0x1D;
+  135   1      }
+  136          
+  137          void ETH_Init()
+  138          { 
+  139   1          ES0_M(1);
+  140   1          delay_ms(200);
+  141   1          ES0_M(0);
+  142   1      
+  143   1          //Õ¯¬Á≤Œ ˝°£   
+  144   1          //STA 
+  145   1          Uart3Send("at+Netmode=2\r\n",14);                   // staƒ£ Ω
+  146   1          delay_ms(100);
+  147   1          Uart3Send("at+LANIp=192.168.16.254\r\n",25);        // …Ë±∏ip
+  148   1          delay_ms(100);
+  149   1          Uart3Send("at+LANIpMask=255.255.255.0\r\n",28);     // …Ë±∏Õ¯πÿ
+  150   1          delay_ms(100);
+  151   1          Uart3Send("at+Dhcpd=0\r\n",12);     
+  152   1          delay_ms(100);
+  153   1          Uart3Send("at+STASsid=TheOne\r\n",19);              // ‘∂∂À√˚≥∆
+  154   1          delay_ms(100);
+  155   1          Uart3Send("at+STAPasswd=20251111\r\n",23);          // ‘∂∂À√‹¬Î
+  156   1          delay_ms(100);
+  157   1          Uart3Send("at+STAEncType=6\r\n",17);                // √‹¬Î±£ª§∑Ω Ω
+  158   1          delay_ms(100);
+  159   1          Uart3Send("at+Dhcpc=1\r\n",12);                     // ∂ØÃ¨∆•≈‰IP
+  160   1          delay_ms(100);
+  161   1      
+  162   1          //æ≤Ã¨IP
+  163   1      //    Uart3Send("at+WANIp=192.168.0.49\r\n",23);
+  164   1      //    delay_ms(50);
+  165   1      //    Uart3Send("at+WANIpMask=255.255.255.0\r\n",28);
+  166   1      //    delay_ms(50);
+  167   1      //    Uart3Send("at+SGw=192.168.0.1\r\n",20);
+  168   1      //    delay_ms(50);
+  169   1      //    Uart3Send("at+SDnsF=114.114.144.114\r\n",27);
+  170   1      //    delay_ms(50);
+  171   1      
+  172   1          //AP
+  173   1      //    Uart3Send("at+Netmode=3\r\n",14);
+  174   1      //    delay_ms(100);
+  175   1      //    Uart3Send("at+Dhcpd=1\r\n",12);
+  176   1      //    delay_ms(100);
+  177   1      //    Uart3Send("at+LANIp=192.168.10.1\r\n",23);
+  178   1      //    delay_ms(100);
+  179   1      //    Uart3Send("at+LANIpMask=255.255.255.0\r\n",28);
+  180   1      //    delay_ms(100);
+  181   1      //    Uart3Send("at+DhcpdIpStart=192.168.10.100\r\n",32);
+  182   1      //    delay_ms(100);
+  183   1      //    //Uart3Send("at+DhcpdMask=255.255.255.0\r\n",28);
+  184   1      //    //delay_ms(200);
+  185   1      //    Uart3Send("at+DhcpdIpStop=192.168.10.250\r\n",31);
+  186   1      //    delay_ms(100);
+  187   1      //    Uart3Send("at+DhcpdTime=86400\r\n",20);
+  188   1      //    delay_ms(100);
+  189   1      //    Uart3Send("at+APEncType=6\r\n",16);
+  190   1      //    delay_ms(100);
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 4   
+
+  191   1      //    Uart3Send("at+APSsid=HLKWIFI\r\n",19);
+  192   1      //    delay_ms(100);
+  193   1      //    Uart3Send("at+APPasswd=12345678\r\n",22);
+  194   1      //    delay_ms(100);
+  195   1          
+  196   1          //ƒ£øÈ¥Æø⁄ 0 ≈‰÷√÷∏¡Ó
+  197   1          Uart3Send("at+NProType0=2\r\n",16);
+  198   1          delay_ms(100);
+  199   1          Uart3Send("at+NDomain0=192.168.74.204\r\n",28);     // ÷˜ª˙IP
+  200   1          delay_ms(100);
+  201   1          Uart3Send("at+NRPort0=8020\r\n",17);                // ‘∂∂À∂Àø⁄
+  202   1          delay_ms(100);
+  203   1          Uart3Send("at+NLPort0=8080\r\n",17);                // …Ë±∏∂Àø⁄
+  204   1          delay_ms(100);
+  205   1          Uart3Send("at+NTcpTo0=0\r\n",14);
+  206   1          delay_ms(100);
+  207   1          CLR_WDT = 1;  // Œππ∑
+  208   1          Uart3Send("at+NProType1=0\r\n",16);
+  209   1          delay_ms(100);
+  210   1          Uart3Send("at+SBaud0=9600\r\n",16);
+  211   1          delay_ms(100);
+  212   1          Uart3Send("at+SWidth0=8\r\n",14);
+  213   1          delay_ms(100);
+  214   1          Uart3Send("at+SPari0=0\r\n",13);
+  215   1          delay_ms(100);
+  216   1          Uart3Send("at+SPari1=0\r\n",13);
+  217   1          delay_ms(100);
+  218   1          Uart3Send("at+SStop0=1\r\n",13);
+  219   1          delay_ms(100);
+  220   1          //±£¥Ê£¨Ã·Ωª÷∏¡Ó°£
+  221   1          Uart3Send("at+Save=1\r\n",11);
+  222   1          delay_ms(100);
+  223   1          Uart3Send("at+Apply=1\r\n",12);
+  224   1          delay_ms(100);    
+  225   1          Uart3Send("at+Reboot=1\r\n",13);
+  226   1          delay_ms(100);
+  227   1      }
+  228          
+  229          void LX_MP3_Init(void)
+  230          {
+  231   1          A1(0);
+  232   1          A2(0);
+  233   1          A3(0);
+  234   1          A4(0);
+  235   1          A5(0);
+  236   1          A6(0);
+  237   1          A7(0);
+  238   1          A8(0);
+  239   1          A9(0);
+  240   1          PAUSE_M(0);
+  241   1          
+  242   1      }
+  243          
+  244          void ProbeSelect()      
+  245          {
+  246   1          if((D1()&&D2()))
+  247   1          {
+  248   2              ProbeSwitch = 0;
+  249   2          }
+  250   1          else
+  251   1          {
+  252   2              if(!D1())
+  253   2              {
+  254   3                  ProbeSwitch = 1;
+  255   3              }
+  256   2              else if(!D2())
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 5   
+
+  257   2              {
+  258   3                  ProbeSwitch = 2;
+  259   3              }
+  260   2          }
+  261   1          if(ProbeSwitch_State != ProbeSwitch)
+  262   1          { 
+  263   2              DevParamDef();
+  264   2              SendCps();
+  265   2              if(ProbeSwitch != 2)
+  266   2              {
+  267   3                  MCP4725_OutVol(MCP4725_S1_ADDR,(char *)SysParam.Lp_Param.s_SysParam.yuzhi1);
+  268   3              }
+  269   2             
+  270   2              ProbeSwitch_State = ProbeSwitch;
+  271   2          }
+  272   1          
+  273   1         
+  274   1      }
+  275          
+  276          void OutCtl(alt_u8 id, alt_u8 st)
+  277          {
+  278   1          if (g_OutStatus[id] == st)
+  279   1          {
+  280   2              return;
+  281   2          }
+  282   1      
+  283   1          g_OutStatus[id] = st;
+  284   1          
+  285   1          switch(id)
+  286   1          {   
+  287   2              case LIGHT_GREEN: 
+  288   2              {
+  289   3                  (st)? GRE_LIGHT(1):GRE_LIGHT(0);
+  290   3                  break;
+  291   3              }
+  292   2      
+  293   2              case LIGHT_BLUE: 
+  294   2              {
+  295   3                  (st)? BLU_LIGHT(1)   :BLU_LIGHT(0); 
+  296   3                  break;
+  297   3              }
+  298   2              
+  299   2              case LIGHT_RED:      
+  300   2              {
+  301   3                  (st)? RED_LIGHT(1) : RED_LIGHT(0);
+  302   3                  break;
+  303   3              }
+  304   2      
+  305   2      
+  306   2              case ALARM_SOUND:   //∑‰√˘∆˜
+  307   2              {
+  308   3                  (st)? ALARM(1) : ALARM(0);       
+  309   3                  break;
+  310   3              }
+  311   2          }
+  312   1      
+  313   1          
+  314   1      }
+  315          
+  316          void OutFlash(alt_u8 id)
+  317          {
+  318   1          static alt_u16 OutTimer[OUT_IO_COUNT] = {0,0,0,0};
+  319   1          if (OutTimer[id] ++ > LED_FLASH_TIME/10)
+  320   1          {
+  321   2              OutTimer[id] = 0;
+  322   2              if (g_OutStatus[id] == 1)
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 6   
+
+  323   2              {
+  324   3                  OutCtl(id, 0);
+  325   3              }
+  326   2              else
+  327   2              {
+  328   3                  OutCtl(id, 1);
+  329   3              }
+  330   2          }
+  331   1      }
+  332          
+  333          void IoCtlTask()
+  334          {
+  335   1          alt_u8 i;
+  336   1          for (i=0;i<OUT_IO_COUNT;i++)
+  337   1          {
+  338   2              if (g_Output[i] == 2)
+  339   2              {
+  340   3                  OutFlash(i);
+  341   3              }
+  342   2              else
+  343   2              {
+  344   3                  OutCtl(i, g_Output[i]);
+  345   3              }
+  346   2          }
+  347   1      }
+  348          
+  349          // ∞Â‘ÿ÷∏ æµ∆
+  350          void RunLed(u16 dt)
+  351          {   
+  352   1          static u16 tm = 0;
+  353   1          u16 to = 3000;
+  354   1          tm += dt;
+  355   1      
+  356   1          if (tm > to)
+  357   1          {
+  358   2              tm = 0;
+  359   2              RUN_LED(0);
+  360   2          }
+  361   1          else if (tm > (to-100))
+  362   1          {
+  363   2              RUN_LED(1);
+  364   2          }
+  365   1      }
+  366          
+  367          
+  368          
+  369          void Task1s()
+  370          {
+  371   1          static BYTE tm = 0;
+  372   1      
+  373   1          //CLR_WDT = 1;  // Œππ∑
+  374   1          
+  375   1          tm++;
+  376   1          if((tm == 3))
+  377   1          {
+  378   2              //GetRetCode();
+  379   2          }
+  380   1      
+  381   1          if((tm == 6))
+  382   1          {
+  383   2               if(ProbeSwitch == 2)
+  384   2               {
+  385   3                  SendReadPD();
+  386   3               }
+  387   2              //GetRetCode();
+  388   2          }
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 7   
+
+  389   1          
+  390   1          if(tm == 9)
+  391   1          {
+  392   2              DevRun();
+  393   2          }
+  394   1          
+  395   1          if(tm == 10)
+  396   1          {
+  397   2              CLR_WDT = 1;  // Œππ∑
+  398   2              SysRunState.isCanReadSensor = 1;      
+  399   2              tm = 0;
+  400   2              Eth_InitTim ++;
+  401   2              if(Eth_InitTim > 8)
+  402   2              {
+  403   3                  Eth_InitTim = 0;
+  404   3                  if(!Eth_Initflag)
+  405   3                  {
+  406   4                      return;
+  407   4                  }
+  408   3                  
+  409   3                  ETH_Init();
+  410   3                  Eth_Initflag = false;
+  411   3              }
+  412   2      
+  413   2          } 
+  414   1      }
+  415          
+  416          
+  417          void AlmConfirm()
+  418          {
+  419   1      //    if(SysRunState.keydownTime >= 300)//≥¨π˝3√Î,≥§∞¥£¨πÿª˙
+  420   1      //    {
+  421   1      //      
+  422   1      //        SysRunState.keydownTime = 0;
+  423   1      //        PowerOff();
+  424   1      //        //PW_MAIN(0);
+  425   1      //    }
+  426   1          
+  427   1          if((SysRunState.keydownFlag == 1)&&(POWER_LOCK()))
+  428   1         {
+  429   2             if((SysRunState.keydownTime > 10)&&(SysRunState.keydownTime < 300))//∞¥º¸ ±º‰≥¨π˝100ms£¨≤ª≥¨π˝3√Î∂
+             -º»œŒ™∂Ã∞¥
+  430   2             {
+  431   3                  //SysRunState.keyValue = 1; 
+  432   3                  g_Output[ALARM_SOUND] = 0; 
+  433   3                              if(MP3_StopFlag)
+  434   3                              {
+  435   4                              
+  436   4                                      if(!AlarmConfirm_flag)
+  437   4                                      {
+  438   5                                  StopMP3(MP3_2);
+  439   5                              StopMP3(MP3_3);
+  440   5                                  StartMP3(MP3_STOP);
+  441   5                                      }
+  442   4                              }
+  443   3                              AlarmConfirm_flag = true;
+  444   3                  //StopAlmLight();
+  445   3             }
+  446   2             else if(SysRunState.keydownTime >= 300)//≥¨π˝2√Î,≥§∞¥£¨πÿª˙
+  447   2             {
+  448   3                  PowerOff();
+  449   3             }
+  450   2             SysRunState.keydownFlag = 0;
+  451   2             SysRunState.keydownTime = 0;
+  452   2         }
+  453   1      }
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 8   
+
+  454          
+  455          
+  456          void TimerTask()
+  457          {
+  458   1          u16 delta = 0;
+  459   1          static u16 Time1s = 0;
+  460   1          
+  461   1          if (Timer0Cnt)
+  462   1          {
+  463   2              delta = Timer0Cnt * 10;
+  464   2              Timer0Cnt = 0;
+  465   2      
+  466   2              if (RX1_Cnt > 0)
+  467   2             {
+  468   3                 Rx1_Timer += delta;
+  469   3             }
+  470   2      
+  471   2              if (RX2_Cnt > 0)
+  472   2              {
+  473   3                  Rx2_Timer += delta;
+  474   3              }
+  475   2      
+  476   2              if(RX3_Cnt > 0)
+  477   2              {
+  478   3                  Rx3_Timer += delta;
+  479   3              }
+  480   2              
+  481   2              if(RX4_Cnt > 0)
+  482   2              {
+  483   3                  Rx4_Timer += delta;
+  484   3              }
+  485   2              
+  486   2              SendPDTim += delta;
+  487   2              if(SendPDTim > 400)
+  488   2              {
+  489   3                  SendPDTim = 0;
+  490   3                  SendPDFlag = 1;
+  491   3              }
+  492   2              
+  493   2              RunLed(delta);
+  494   2              IoCtlTask();
+  495   2              ProbeSelect();
+  496   2              
+  497   2              Time1s += delta;
+  498   2              if (Time1s >= 100)
+  499   2              {
+  500   3                  Time1s = 0;
+  501   3                  Task1s();
+  502   3              }
+  503   2          }
+  504   1      }
+  505          
+  506          void Delay(WORD ms)
+  507          {
+  508   1          WORD t = 1000;
+  509   1          while(ms--)
+  510   1          {
+  511   2              for (t=0;t<1000;t++) ;
+  512   2          }
+  513   1      }
+  514          
+  515          void Delayms(WORD ms)   //@11.0592MHz
+  516          {
+  517   1              unsigned long edata i;
+  518   1          while(ms--)
+  519   1          {
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 9   
+
+  520   2              _nop_();
+  521   2              _nop_();
+  522   2              i = 2763UL;
+  523   2              while (i) i--;
+  524   2          }
+  525   1      }
+  526          
+  527          void delay_ms(unsigned int ms)
+  528          {
+  529   1          unsigned int i;
+  530   1          do{
+  531   2              i = MAIN_Fosc / 6030;
+  532   2              while(--i);
+  533   2          }while(--ms);
+  534   1      }
+  535          
+  536          
+  537          WORD ParamCheck(BYTE *buf, WORD len)
+  538          {
+  539   1          WORD dwSum = 0;
+  540   1          WORD i;
+  541   1      
+  542   1          for (i = 0; i < len; i++)
+  543   1          {
+  544   2              dwSum += buf[i];
+  545   2          }
+  546   1      
+  547   1          return dwSum;
+  548   1      }
+  549          
+  550          void ReadParam()
+  551          {
+  552   1          EEPROM_read(0, (BYTE *)&SysParam, sizeof(SYS_PARAM));
+  553   1          if ((SysParam.Sum != ParamCheck((BYTE *)&SysParam, sizeof(SYS_PARAM)-2)))
+  554   1          {
+  555   2              GeneralParam();
+  556   2              DevParamDef();
+  557   2              memcpy(SysParam.VerSion,DEV_VER,6);
+  558   2              WriteParam();
+  559   2          }
+  560   1      }
+  561          
+  562          
+  563          void WriteParam()
+  564          {
+  565   1          EA = 0;    
+  566   1          
+  567   1          EEPROM_SectorErase(0);
+  568   1          EEPROM_SectorErase(512);
+  569   1          SysParam.Sum = ParamCheck((BYTE *)&SysParam, sizeof(SYS_PARAM)-2);
+  570   1          if (!EEPROM_write(0, (BYTE *)&SysParam, sizeof(SYS_PARAM)))
+  571   1          {
+  572   2              Error();
+  573   2          }
+  574   1      
+  575   1          EA = 1;     //¥Úø™◊‹÷–∂œ
+  576   1      }
+  577          
+  578          
+  579          
+  580          
+  581          void GetInput()
+  582          {
+  583   1          if(POWER_LOCK() == 0)
+  584   1          {
+  585   2              delay_ms(30);
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 10  
+
+  586   2              while(POWER_LOCK() == 0)
+  587   2              {
+  588   3                  SysRunState.keydownFlag = 1; 
+  589   3              }
+  590   2               AlmConfirm();
+  591   2          }
+  592   1      }
+  593          
+  594          
+  595          void PowerOff()
+  596          {
+  597   1          RED_LIGHT(0);  // ∫Ïµ∆
+  598   1          GRE_LIGHT(0);  // ª∆µ∆
+  599   1          BLU_LIGHT(0);  // ¿∂µ∆
+  600   1          ALARM(0);      // ±®æØ“Ù
+  601   1          ShowLight(0);
+  602   1          PW_MAIN(0);
+  603   1      
+  604   1          while(1)
+  605   1          {
+  606   2              ;
+  607   2          }
+  608   1      }
+  609          
+  610          void HndInput()
+  611          {
+  612   1          #if 0
+                   static bool em = false;
+                   if(STOP_M() == 0)
+                   {
+                       delay_ms(10);
+                       if (STOP_M() == 0)
+                       {
+                           if (RunStatus.Running)
+                           {
+                               StopSamp(false);
+                           }
+                       }
+               
+                       if (em == false)
+                       {
+                           em = true;
+                           ShowEmStop(em);
+                       }
+                   }
+                   else
+                   {
+                       if (em)
+                       {
+                           em = false;
+                           ShowEmStop(em);
+                       }
+                   }
+                   #endif
+  640   1      }
+  641          
+  642          /*
+  643          void ReportInput()
+  644          {
+  645              BYTE PwOff = POWER_OFF;
+  646              
+  647              if (g_CommIdleTime > 200)
+  648              {
+  649                  if (g_Key_Confrom)
+  650                  {
+  651                      g_Key_Confrom = 0;
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 11  
+
+  652                      SendPcCmd(0, CMD_CERTAINKEY, NULL, 0);
+  653                      return;
+  654                  }
+  655          
+  656                  if (g_Key_Power)
+  657                  {
+  658                      g_Key_Power = 0;
+  659                      SendPcCmd(0, CMD_POWER, &PwOff, 1);
+  660                      return;
+  661                  }
+  662          
+  663                  #if 0
+  664                  if (g_Key_Input)
+  665                  {
+  666                      g_Key_Input = 0;
+  667                      SendPcCmd(0, CMD_INPUT, &Input_Status, 1);
+  668                  }
+  669                  #endif
+  670              }
+  671          }
+  672          */
+  673          
+  674          void LedInit()
+  675          {
+  676   1          // ÷∏ æµ∆
+  677   1          RED_LIGHT(0);  // ∫Ïµ∆
+  678   1          GRE_LIGHT(0);  // ¬Ãµ∆
+  679   1          BLU_LIGHT(0);  // ¿∂µ∆
+  680   1          ALARM(0);      // ±®æØ“Ù
+  681   1      }
+  682          
+  683          
+  684          void GeneralParam()
+  685          {
+  686   1          SysParam.Sign     = PARAM_SIGN;
+  687   1          RunStatus.Unit = Unit_uSv;
+  688   1          SysParam.Cps_Enable = 0;
+  689   1          SysParam.Cps_Check = 0;
+  690   1      
+  691   1          SysParam.s_General_Info.Address = 1;
+  692   1          memset(&SysParam.s_General_Info.Index,0,32); 
+  693   1          memset(&SysParam.s_General_Info.Location,0,32); 
+  694   1          memset(&SysParam.s_General_Info.Name,0,32); 
+  695   1          sprintf((char*) SysParam.s_General_Info.Name,DEV_NAME);  
+  696   1          WriteParam();
+  697   1      }
+  698          
+  699          void DevParamDef()
+  700          {
+  701   1          BYTE i;
+  702   1          switch(ProbeSwitch)
+  703   1          {
+  704   2              case 0:
+  705   2                      memset((void*)&SysParam.Lp_Param,0,sizeof(LP_PARAM));
+  706   2                      SysParam.Lp_Param.Sign = 0x4142;
+  707   2      
+  708   2                      SysParam.Lp_Param.s_Alarm.DosePreAlarm = 300;     //300uSv
+  709   2                      SysParam.Lp_Param.s_Alarm.DoseAlarm = 400;        //400uSv
+  710   2                      SysParam.Lp_Param.s_Alarm.DoseRatePreAlarm = 300;//300uSv/h
+  711   2                      SysParam.Lp_Param.s_Alarm.DoseRateAlarm = 400;//400uSv/h
+  712   2      
+  713   2                      SysParam.Lp_Param.s_SysParam.Canshu1 = 1;
+  714   2                      SysParam.Lp_Param.s_SysParam.Canshu2 = 1;
+  715   2      
+  716   2                      #ifdef POE_SEN
+  717   2                      // µÕ¡ø≥Ã”√Co60ƒ‚∫œ£¨◊Ó∫Ûº¡¡ø¬ “™≥ÀCo/Cs±»
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 12  
+
+  718   2                      SysParam.Lp_Param.s_Jiaozhun.DI_A = 0.071749524255754;                  // 0.0552364572191522;                                  
+             -//a = 1.84773623191768
+  719   2                      SysParam.Lp_Param.s_Jiaozhun.DI_B = 0.321361930688732;                  // 0.325776472823953;                                   //b 
+             -= 0.362602496332558
+  720   2                      SysParam.Lp_Param.s_Jiaozhun.DI_C = 0.00117277837260376;                // 0.00103232522627559;                                 //c
+             - = 5.23843587599517E-05
+  721   2                      SysParam.Lp_Param.s_Jiaozhun.DI_D = -4.45221185949912E-06;              // -3.46972129850684E-06;                               
+             -//d = 2.02801464142905E-09
+  722   2      
+  723   2                      SysParam.Lp_Param.s_Jiaozhun.MID_A = 5.1735799060138;    
+  724   2                      SysParam.Lp_Param.s_Jiaozhun.MID_B = 0.314778799356561; 
+  725   2                      SysParam.Lp_Param.s_Jiaozhun.MID_C = 0.000188389561373155;
+  726   2                      SysParam.Lp_Param.s_Jiaozhun.MID_D = -6.40204890256851E-08;
+  727   2                      
+  728   2                      // Cs137 > 1.2m
+  729   2                      SysParam.Lp_Param.s_Jiaozhun.GAO_A = 3.62608397252143;                  //684.399049164029; 
+  730   2                      SysParam.Lp_Param.s_Jiaozhun.GAO_B = 6.3652408143604;                   //6.14300026842352; 
+  731   2                      SysParam.Lp_Param.s_Jiaozhun.GAO_C = 0.00160225788737462;               //5.3028356929535E-05;  
+  732   2                      SysParam.Lp_Param.s_Jiaozhun.GAO_D = -1.72769678770162E-06;             //9.30859286124393E-10;
+  733   2                      #else
+                               SysParam.Lp_Param.s_Jiaozhun.DI_A = 0.5593;    // 0.56;
+                               SysParam.Lp_Param.s_Jiaozhun.DI_B = 0.000119; // 0.00017;
+                               SysParam.Lp_Param.s_Jiaozhun.DI_C = 1;
+                               SysParam.Lp_Param.s_Jiaozhun.GAO_A = 31.92; // 33.6;
+                               SysParam.Lp_Param.s_Jiaozhun.GAO_B = 0.000018;  // 0.000023;
+                               SysParam.Lp_Param.s_Jiaozhun.GAO_C = 1;
+                               #endif
+  741   2                      sprintf((char*)SysParam.Lp_Param.s_SysParam.yuzhi1,"160");
+  742   2                      SysParam.Lp_Param.CoCsRate = 1.19;
+  743   2      
+  744   2                      //memcpy((char *)&SysParam.Lp_Param.NhParam, (char *)&NhDef, sizeof(NH_PARAM)*NH_COUNT);
+  745   2      
+  746   2                      for (i=0;i<FIX_COUNT;i++)
+  747   2                      {
+  748   3                          SysParam.Lp_Param.Fix[i] = 1.0;
+  749   3                      }
+  750   2                      break;
+  751   2                      
+  752   2              case 1: 
+  753   2                      memset((void*)&SysParam.Lp_Param,0,sizeof(LP_PARAM));
+  754   2                      SysParam.Lp_Param.Sign = 0x4142;
+  755   2      
+  756   2                      SysParam.Lp_Param.s_Alarm.DosePreAlarm = 300;       //300uSv
+  757   2                      SysParam.Lp_Param.s_Alarm.DoseAlarm = 400;          //400uSv
+  758   2                      SysParam.Lp_Param.s_Alarm.DoseRatePreAlarm = 30;    //30uSv/h
+  759   2                      SysParam.Lp_Param.s_Alarm.DoseRateAlarm = 40;       //40uSv/h
+  760   2      
+  761   2                      SysParam.Lp_Param.s_SysParam.Canshu1 = 1;
+  762   2                      SysParam.Lp_Param.s_SysParam.Canshu2 = 1;
+  763   2      
+  764   2                      #ifdef POE_SEN
+  765   2                      // µÕ¡ø≥Ã”√Co60ƒ‚∫œ£¨◊Ó∫Ûº¡¡ø¬ “™≥ÀCo/Cs±»
+  766   2                      SysParam.Lp_Param.s_Jiaozhun.DI_A = -0.119135107108512;    
+  767   2                      SysParam.Lp_Param.s_Jiaozhun.DI_B = 0.406688356856999; 
+  768   2                      SysParam.Lp_Param.s_Jiaozhun.DI_C = -0.000795882360575705;
+  769   2                      SysParam.Lp_Param.s_Jiaozhun.DI_D = 8.30493670182536E-06;
+  770   2      
+  771   2                      SysParam.Lp_Param.s_Jiaozhun.MID_A = 25.2437957332788;    
+  772   2                      SysParam.Lp_Param.s_Jiaozhun.MID_B = 0.352560222117065; 
+  773   2                      SysParam.Lp_Param.s_Jiaozhun.MID_C = 6.84378068779986E-05;
+  774   2                      SysParam.Lp_Param.s_Jiaozhun.MID_D = 0;
+  775   2                      
+  776   2                      // Cs137 > 1.2m
+  777   2                      SysParam.Lp_Param.s_Jiaozhun.GAO_A = -32435.201473664; 
+  778   2                      SysParam.Lp_Param.s_Jiaozhun.GAO_B = 35.1613941353375; 
+  779   2                      SysParam.Lp_Param.s_Jiaozhun.GAO_C = -6.81597532235814E-4;  
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 13  
+
+  780   2                      SysParam.Lp_Param.s_Jiaozhun.GAO_D = 2.46287003496529E-08;
+  781   2                      #else
+                               SysParam.Lp_Param.s_Jiaozhun.DI_A = 0.5593;    // 0.56;
+                               SysParam.Lp_Param.s_Jiaozhun.DI_B = 0.000119; // 0.00017;
+                               SysParam.Lp_Param.s_Jiaozhun.DI_C = 1;
+                               SysParam.Lp_Param.s_Jiaozhun.GAO_A = 31.92; // 33.6;
+                               SysParam.Lp_Param.s_Jiaozhun.GAO_B = 0.000018;  // 0.000023;
+                               SysParam.Lp_Param.s_Jiaozhun.GAO_C = 1;
+                               #endif
+  789   2                      sprintf((char*)SysParam.Lp_Param.s_SysParam.yuzhi1,"140");
+  790   2      
+  791   2                      SysParam.Lp_Param.CoCsRate = 1.19;
+  792   2                      
+  793   2                      #ifdef P2P_NH
+                               memcpy((char *)&SysParam.Lp_Param.NhParam, (char *)&NhDef, sizeof(NH_PARAM)*NH_COUNT);
+                               #endif
+  796   2                      
+  797   2                      for (i=0;i<FIX_COUNT;i++)
+  798   2                      {
+  799   3                          SysParam.Lp_Param.Fix[i] = 1.0;
+  800   3                      }
+  801   2                      break;
+  802   2              case 2: 
+  803   2                      SysParam.Pd_param.Address = PD_MODBUS_ADDR;
+  804   2                      SysParam.Pd_param.s_Alarm.DosePreAlarm = 300;     //300uSv
+  805   2                      SysParam.Pd_param.s_Alarm.DoseAlarm = 400;        //400uSv
+  806   2                      SysParam.Pd_param.s_Alarm.DoseRatePreAlarm = 300;//300uSv/h
+  807   2                      SysParam.Pd_param.s_Alarm.DoseRateAlarm = 400;    //400uSv/h
+  808   2                      SysParam.Pd_param.s_Thr.Det_Thr[0] = 255-30;
+  809   2                      SysParam.Pd_param.s_Thr.Det_Thr[1] = 10;
+  810   2                      SysParam.Pd_param.s_Thr.Det_Thr[2] = 150;
+  811   2                      for(i = 0;i<PD_FIXNUM;i++)
+  812   2                      {
+  813   3                          SysParam.Pd_param.fix[i] = 1.0;
+  814   3                      }      
+  815   2                      break;
+  816   2          }
+  817   1          SysParam.Cps_Enable = 0;
+  818   1          SysParam.Cps_Check = 0;
+  819   1      
+  820   1          WriteParam();
+  821   1      
+  822   1      }
+  823          
+  824          void SaveParam()
+  825          {
+  826   1          WriteParam();
+  827   1      }
+  828          
+  829          
+  830          void UpdataUI()
+  831          {
+  832   1      
+  833   1          //ShowStatus();
+  834   1          ShowIcon(REG_STATUS,0);
+  835   1          delay_ms(200);
+  836   1          StatusColor(true);
+  837   1      }
+  838          
+  839          void InitLcd()
+  840          {   
+  841   1          memset(&RunStatus, 0, sizeof(RUN_STATUS));
+  842   1          memset(&RunInfo, 0, sizeof(RUN_INFO));
+  843   1          ShowLightON();
+  844   1          delay_ms(200);
+  845   1          HideBorder();
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 14  
+
+  846   1          delay_ms(200);
+  847   1          SendCps();
+  848   1          delay_ms(200);
+  849   1          ShowCps();
+  850   1          delay_ms(200);
+  851   1          Cps_Check();
+  852   1          delay_ms(200);
+  853   1          UpdataUI();    
+  854   1          delay_ms(200);
+  855   1          ShowIcon(MP_SCALE_END+1,36);
+  856   1          delay_ms(200);
+  857   1          HideControl();
+  858   1          delay_ms(20);
+  859   1          
+  860   1          //SendParam();
+  861   1          //delay_ms(200);
+  862   1          //SetBkLight(false);
+  863   1          //delay_ms(200);
+  864   1          //ShowDevInfo();
+  865   1          //delay_ms(200);
+  866   1      }
+  867          
+  868          
+  869          void Char2Unicode(char *buff,BYTE len)
+  870          {
+  871   1          BYTE i = 0;
+  872   1          WORD dat = 0;
+  873   1          for(i = 0;i<len;i++)
+  874   1          {
+  875   2              RunInfo.DoseRate[i] = (dat|buff[i]);
+  876   2          }
+  877   1      }
+  878          
+  879          void GetDoseRate()
+  880          {
+  881   1          char drbuff[5] = {0};
+  882   1          static WORD time = 0;
+  883   1      
+  884   1          switch(ProbeSwitch)
+  885   1          {
+  886   2              case 0:
+  887   2              case 1: 
+  888   2                      #if 0
+                               time++;
+                               if(time < 30)
+                               {
+                                   SysRunState.s_DoseMSG.DoseRate = 2.00; 
+                               }
+                               else if(time < 60)
+                               {
+                                   SysRunState.s_DoseMSG.DoseRate = 1386.8;
+                                  
+                               } 
+                               if(time > 60)
+                               {
+                                   time = 0;
+                               } 
+                               CalcAlarmState(&SysRunState);
+                                               My_Doserate = SysRunState.s_DoseMSG.DoseRate;
+                               //printf("DoseRate1 = %f\r\n",SysRunState.s_DoseMSG.DoseRate);
+                               Set_LP_DoseRateUnit(); 
+                               #endif
+  908   2                      RunStatus.DoseRate = My_Doserate;               
+  909   2                      break;
+  910   2              case 2: RunStatus.DoseRate = My_PDDoserate;     // ƒ£ƒ‚
+  911   2                      break;
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 15  
+
+  912   2          }
+  913   1          if(RunStatus.DoseRate < 10)
+  914   1          {
+  915   2              sprintf((char *)drbuff,"%.3f", RunStatus.DoseRate);
+  916   2          }
+  917   1          else if(RunStatus.DoseRate < 100)
+  918   1          {
+  919   2              sprintf((char *)drbuff,"%.2f", RunStatus.DoseRate);
+  920   2          }
+  921   1          else if(RunStatus.DoseRate == 100)
+  922   1          {
+  923   2              
+  924   2              sprintf((char *)drbuff,"%.1f", RunStatus.DoseRate);
+  925   2          }
+  926   1          Char2Unicode(drbuff,5);
+  927   1          
+  928   1          memset(RunInfo.Unit,0,8);
+  929   1          //sprintf(Unit, UnitText[RunStatus.Unit]);
+  930   1          sprintf(RunInfo.Unit, UnitText[RunStatus.Unit]);
+  931   1          LcdCmd(LCD_CMD_WRITE, REG_SCALE_UNIT, (BYTE *)RunInfo.Unit,8);
+  932   1      }
+  933          
+  934          void CheckDoseRate()
+  935          {
+  936   1          WORD deg = 0,i = 0;
+  937   1          WORD buf[SCALE_NUM];
+  938   1          if(RunStatus.DoseRate <= 10)
+  939   1          {
+  940   2              ShowVal(ScaleBuf);
+  941   2              deg = RunStatus.DoseRate * 10;
+  942   2          }
+  943   1         else if(RunStatus.DoseRate <= 100)
+  944   1          {
+  945   2              buf[0] = SPIN_SCALE0_VAL;
+  946   2              for(i = 0;i < SCALE_NUM-1;i++)
+  947   2              {
+  948   3                  buf[i+1] = buf[i] + 10;
+  949   3              }
+  950   2              ShowVal((WORD *)buf);
+  951   2              deg = RunStatus.DoseRate;
+  952   2          }
+  953   1      //    else if(RunStatus.DoseRate <= 1000)
+  954   1      //    {
+  955   1      //        buf[0] = SPIN_SCALE10_VAL*5;
+  956   1      //        for(i = 0;i < SCALE_NUM-1;i++)
+  957   1      //        {
+  958   1      //            buf[i+1] = buf[i] + 50;
+  959   1      //        }        
+  960   1      //        ShowVal((WORD *)buf);
+  961   1      //        deg = (RunStatus.DoseRate-500)/5;
+  962   1      //
+  963   1      //       
+  964   1      //    }
+  965   1          ShowSpin(deg);
+  966   1      }
+  967          
+  968          void StartMP3(BYTE id)
+  969          {
+  970   1          switch(id)
+  971   1          {
+  972   2              case MP3_1: A1(1);delay_ms(100);break;   
+  973   2      
+  974   2              case MP3_2: A2(1);delay_ms(100);break;   
+  975   2      
+  976   2              case MP3_3: A3(1);delay_ms(100);break;   
+  977   2      
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 16  
+
+  978   2              case MP3_4: A4(1);delay_ms(100);break;   
+  979   2      
+  980   2              case MP3_5: A5(1);delay_ms(100);break;   
+  981   2      
+  982   2              case MP3_6: A6(1);delay_ms(100);break;   
+  983   2      
+  984   2              case MP3_7: A7(1);delay_ms(100);break;   
+  985   2      
+  986   2              case MP3_8: A8(1);delay_ms(100);break;   
+  987   2      
+  988   2              case MP3_9: A9(1);delay_ms(100);break;   
+  989   2      
+  990   2              case MP3_STOP: PAUSE_M(1);delay_ms(200);  PAUSE_M(0);      break;
+  991   2          }
+  992   1      }
+  993          
+  994          void StopMP3(BYTE id)
+  995          {
+  996   1          switch(id)
+  997   1          {
+  998   2              case MP3_1: A1(0);delay_ms(100);break;
+  999   2      
+ 1000   2              case MP3_2: A2(0);delay_ms(100);break;
+ 1001   2      
+ 1002   2              case MP3_3: A3(0);delay_ms(100);break;
+ 1003   2      
+ 1004   2              case MP3_4: A4(0);delay_ms(100);break;
+ 1005   2      
+ 1006   2              case MP3_5: A5(0);delay_ms(100);break;
+ 1007   2      
+ 1008   2              case MP3_6: A6(0);delay_ms(100);break;
+ 1009   2      
+ 1010   2              case MP3_7: A7(0);delay_ms(100);break;
+ 1011   2      
+ 1012   2              case MP3_8: A8(0);delay_ms(100);break;
+ 1013   2      
+ 1014   2              case MP3_9: A9(0);delay_ms(100);break;
+ 1015   2      
+ 1016   2              case MP3_STOP: PAUSE_M(0);     break;
+ 1017   2      
+ 1018   2          }
+ 1019   1      
+ 1020   1      }
+ 1021          
+ 1022          void StopAlmLight()
+ 1023          {
+ 1024   1          g_Output[LIGHT_GREEN] = 0;
+ 1025   1          g_Output[LIGHT_RED] = 0;
+ 1026   1          g_Output[ALARM_SOUND] = 0; 
+ 1027   1      
+ 1028   1          HideBorder();
+ 1029   1          StopMP3(MP3_2);
+ 1030   1          StopMP3(MP3_3);
+ 1031   1      
+ 1032   1          if(MP3_StopFlag)
+ 1033   1          {
+ 1034   2              if(!AlarmConfirm_flag)
+ 1035   2              {
+ 1036   3                  StartMP3(MP3_STOP);
+ 1037   3              }
+ 1038   2              MP3_StopFlag = 0;
+ 1039   2          }
+ 1040   1          AlarmConfirm_flag = false;
+ 1041   1          
+ 1042   1      }
+ 1043          void AbnorAlarm()
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 17  
+
+ 1044          {   
+ 1045   1          bool HaveAlarm = false;
+ 1046   1              
+ 1047   1          if((DoseRateAlarm == ALM_DOSERATE_PRE)||(DoseRateAlarm == ALM_DOSE_PRE))
+ 1048   1          {
+ 1049   2              HaveAlarm = true;
+ 1050   2                      RunInfo.FsIcon = 1;
+ 1051   2              ShowIcon(REG_STATUS,1);
+ 1052   2              g_Output[LIGHT_RED] = 1;
+ 1053   2                      g_Output[LIGHT_GREEN] = 1;
+ 1054   2              ShowIcon(MP_SCALE_END+1,37);
+ 1055   2              ShowBorderY();
+ 1056   2              if(!AlarmConfirm_flag)
+ 1057   2              {
+ 1058   3                  StartMP3(MP3_2);
+ 1059   3              }
+ 1060   2              StopMP3(MP3_3);
+ 1061   2      
+ 1062   2          }
+ 1063   1          else if((DoseRateAlarm == ALM_DOSERATE_ERROR)||(DoseRateAlarm == ALM_DOSE_ERROR)
+ 1064   1              ||(DoseRateAlarm == ALM_DOSE_OVER))
+ 1065   1          {
+ 1066   2              HaveAlarm = true;
+ 1067   2                      RunInfo.FsIcon = 2;
+ 1068   2              ShowIcon(REG_STATUS,2);
+ 1069   2              g_Output[LIGHT_RED] = 1;
+ 1070   2                      g_Output[LIGHT_GREEN] = 0;
+ 1071   2              ShowIcon(MP_SCALE_END+1,38);
+ 1072   2              ShowBorderR();
+ 1073   2              if(!AlarmConfirm_flag)
+ 1074   2              {
+ 1075   3                  StartMP3(MP3_3);
+ 1076   3              }
+ 1077   2              StopMP3(MP3_2);
+ 1078   2          }
+ 1079   1          else
+ 1080   1          {
+ 1081   2              HaveAlarm = false;
+ 1082   2              }
+ 1083   1          if (HaveAlarm)
+ 1084   1          {
+ 1085   2              MP3_StopFlag = 1;
+ 1086   2                      if(!AlarmConfirm_flag)
+ 1087   2              {
+ 1088   3                      g_Output[ALARM_SOUND] = 1;
+ 1089   3              }
+ 1090   2          }
+ 1091   1          else
+ 1092   1          {
+ 1093   2              RunInfo.FsIcon = 0;
+ 1094   2              ShowIcon(REG_STATUS,0);
+ 1095   2              ShowIcon(MP_SCALE_END+1,36);
+ 1096   2              StopAlmLight();
+ 1097   2          }
+ 1098   1      }
+ 1099          void CheckAlarm()
+ 1100          {
+ 1101   1          switch(ProbeSwitch)
+ 1102   1          {
+ 1103   2              case 0:
+ 1104   2              case 1: 
+ 1105   2                      if((SysRunState.s_DoseMSG.State & (1<<7)))
+ 1106   2                      {
+ 1107   3                          DoseRateAlarm = ALM_DOSERATE_PRE;
+ 1108   3                      }
+ 1109   2                      else if((SysRunState.s_DoseMSG.State & (1<<6)))
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 18  
+
+ 1110   2                      {
+ 1111   3                          DoseRateAlarm = ALM_DOSERATE_ERROR;
+ 1112   3                      }
+ 1113   2                      #if 0
+                               else if((SysRunState.s_DoseMSG.State & (1<<5)))
+                               {
+                                   DoseRateAlarm = ALM_DOSE_PRE;
+                               }
+                               else if((SysRunState.s_DoseMSG.State & (1<<4)))
+                               {
+                                   DoseRateAlarm = ALM_DOSE_ERROR;
+                               }
+                               else if((SysRunState.s_DoseMSG.State & (1<<3)))
+                               {
+                                   DoseRateAlarm = ALM_DOSE_OVER;
+                               }
+                               #endif
+ 1127   2                      else
+ 1128   2                      {
+ 1129   3                          DoseRateAlarm = ALM_DOSERATE_NOR;
+ 1130   3                      }
+ 1131   2                      break;
+ 1132   2              case 2: 
+ 1133   2                     //printf("DevSt = %d\r\n",SysParam.Pd_param.s_DoseRate.DevSt);
+ 1134   2                      if((SysParam.Pd_param.s_DoseRate.DevSt & (1<<7)))
+ 1135   2                      {
+ 1136   3                          DoseRateAlarm = ALM_DOSERATE_PRE;
+ 1137   3                      }
+ 1138   2                      else if((SysParam.Pd_param.s_DoseRate.DevSt & (1<<6)))
+ 1139   2                      {
+ 1140   3                          DoseRateAlarm = ALM_DOSERATE_ERROR;
+ 1141   3                      }
+ 1142   2                      #if 0
+                               else if((SysParam.Pd_param.s_DoseRate.DevSt & (1<<5)))
+                               {
+                                   DoseRateAlarm = ALM_DOSE_PRE;
+                               }
+                               else if((SysParam.Pd_param.s_DoseRate.DevSt & (1<<4)))
+                               {
+                                   DoseRateAlarm = ALM_DOSE_ERROR;
+                               }
+                               else if((SysParam.Pd_param.s_DoseRate.DevSt & (1<<3)))
+                               {
+                                   DoseRateAlarm = ALM_DOSE_OVER;
+                               }
+                               #endif
+ 1156   2                      else
+ 1157   2                      {
+ 1158   3                          DoseRateAlarm = ALM_DOSERATE_NOR;
+ 1159   3                      }
+ 1160   2                      break; 
+ 1161   2          }
+ 1162   1      
+ 1163   1          if (HisAlarm != DoseRateAlarm)
+ 1164   1          {
+ 1165   2              // ±®æØ”–±‰ªØ≤≈∏¸–¬ΩÁ√Ê
+ 1166   2              //delay_ms(200);
+ 1167   2              //ShowStatus();
+ 1168   2              //delay_ms(200);
+ 1169   2              StatusColor(false);
+ 1170   2      
+ 1171   2              HisAlarm = DoseRateAlarm;
+ 1172   2          }
+ 1173   1          AbnorAlarm();
+ 1174   1      }
+ 1175          
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 19  
+
+ 1176          // 1√Î‘À––“ª¥Œ
+ 1177          void DevRun()
+ 1178          {
+ 1179   1          RunStatus.RunTime ++;
+ 1180   1          //CPSœ‘ æ
+ 1181   1          ShowCps();
+ 1182   1          
+ 1183   1          GetDoseRate();
+ 1184   1          
+ 1185   1          //øÃ∂»≈Ã÷∏’Îœ‘ æ
+ 1186   1          CheckDoseRate();
+ 1187   1      
+ 1188   1          // 2. œ‘ æº¡¡ø¬ ∫Õ◊¥Ã¨
+ 1189   1          ShowDoseRate();
+ 1190   1          //delay_ms(200);
+ 1191   1          
+ 1192   1          // 3. ºÏ≤È±®æØ◊¥Ã¨  
+ 1193   1          if (RunStatus.RunTime > 5)
+ 1194   1          {
+ 1195   2              RunStatus.RunTime = 6;
+ 1196   2              // ‘À–– ±º‰¥Û”⁄10√Î≤≈ºÏ≤‚
+ 1197   2              CheckAlarm();
+ 1198   2          }
+ 1199   1      
+ 1200   1      }
+ 1201          
+ 1202          
+ 1203          void SyncModBusDev()
+ 1204          {
+ 1205   1          BYTE i;
+ 1206   1          SysParam.Pd_param.Address =  SysParam.s_General_Info.Address;
+ 1207   1          ModBusPD_Param.Address = SysParam.Pd_param.Address;
+ 1208   1          //ModBusPD_Param.Ver = SysParam.Pd_param.Ver;
+ 1209   1          //sprintf(ModBusAddr.Ver,"V%d.%d.%d", SysParam.Ver/100, SysParam.Ver%100/10, SysParam.Ver%10 );
+ 1210   1      //    memset(&ModBusPD_Param.s_DoseRate, 0, sizeof(PD_DOSERATE));
+ 1211   1      //    ModBusPD_Param.s_DoseRate.DoseRate = SysParam.Pd_param.s_DoseRate.DoseRate;
+ 1212   1      //    ModBusPD_Param.s_DoseRate.DoseTotal = SysParam.Pd_param.s_DoseRate.DoseTotal;
+ 1213   1      //    ModBusPD_Param.s_DoseRate.DevSt= SysParam.Pd_param.s_DoseRate.DevSt;
+ 1214   1      //    ModBusPD_Param.s_DoseRate.Cps1 = SysParam.Pd_param.s_DoseRate.Cps1;
+ 1215   1      //    ModBusPD_Param.s_DoseRate.Cps2 = SysParam.Pd_param.s_DoseRate.Cps2;
+ 1216   1      //    ModBusPD_Param.s_DoseRate.Cps3 = SysParam.Pd_param.s_DoseRate.Cps3;
+ 1217   1      
+ 1218   1          memset(&ModBusPD_Param.s_Alarm, 0, sizeof(PD_ALARM));
+ 1219   1          ModBusPD_Param.s_Alarm.DoseRatePreAlarm = SysParam.Pd_param.s_Alarm.DoseRatePreAlarm;
+ 1220   1          ModBusPD_Param.s_Alarm.DoseRateAlarm= SysParam.Pd_param.s_Alarm.DoseRateAlarm;
+ 1221   1          ModBusPD_Param.s_Alarm.DosePreAlarm = SysParam.Pd_param.s_Alarm.DosePreAlarm;
+ 1222   1          ModBusPD_Param.s_Alarm.DoseAlarm = SysParam.Pd_param.s_Alarm.DoseAlarm;
+ 1223   1      
+ 1224   1          memset(&ModBusPD_Param.s_Thr, 0, sizeof(PD_THR));
+ 1225   1          for(i = 0;i<3;i++)
+ 1226   1          {
+ 1227   2              ModBusPD_Param.s_Thr.Det_Thr[i] = SysParam.Pd_param.s_Thr.Det_Thr[i];
+ 1228   2          }
+ 1229   1          ModBusPD_Param.s_Thr.AnalogChannel = SysParam.Pd_param.s_Thr.AnalogChannel;
+ 1230   1      
+ 1231   1          memset(&ModBusPD_Param.fix, 0, sizeof(ModBusPD_Param.fix));
+ 1232   1          for(i = 0;i < 16;i++)
+ 1233   1          {
+ 1234   2              ModBusPD_Param.fix[i] = SysParam.Pd_param.fix[i];
+ 1235   2          }
+ 1236   1      
+ 1237   1          memset(&ModBusPD_Param.s_PdInfo, 0, sizeof(PD_INFO));
+ 1238   1              
+ 1239   1          //memcpy(SysParam.Pd_param.s_PdInfo.Name,SysParam.s_General_Info.Name,32);
+ 1240   1          //memcpy(ModBusPD_Param.s_PdInfo.Index,SysParam.Pd_param.s_PdInfo.Index,32);
+ 1241   1          //memcpy(ModBusPD_Param.s_PdInfo.Location,SysParam.Pd_param.s_PdInfo.Location,32);
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 20  
+
+ 1242   1          //memcpy(ModBusPD_Param.s_PdInfo.Name,SysParam.Pd_param.s_PdInfo.Name,32);
+ 1243   1          
+ 1244   1      }
+ 1245          
+ 1246          void Dev_Init()
+ 1247          {
+ 1248   1          ProbeSwitch = 0;
+ 1249   1          if((D1()&&D2()))
+ 1250   1          {
+ 1251   2              ProbeSwitch = 0;
+ 1252   2          }
+ 1253   1          else
+ 1254   1          {
+ 1255   2              if(!D1())
+ 1256   2              {
+ 1257   3                  ProbeSwitch = 1;
+ 1258   3              }
+ 1259   2              else if(!D2())
+ 1260   2              {
+ 1261   3                  ProbeSwitch = 2;
+ 1262   3              }
+ 1263   2          }
+ 1264   1          //ProbeSwitch_State = ProbeSwitch;
+ 1265   1          RST(0);
+ 1266   1          ES0_M(0);
+ 1267   1          //ES1_M(0);
+ 1268   1      
+ 1269   1      }
+ 1270          
+ 1271          void main(void)
+ 1272          {
+ 1273   1          SysInit();
+ 1274   1          IoInit();
+ 1275   1          PW_MAIN(1);  // ÷˜µÁ‘¥
+ 1276   1          delay_ms(500);
+ 1277   1          
+ 1278   1          RUN_LED(1);
+ 1279   1          
+ 1280   1          //ProbeSelect();
+ 1281   1          Dev_Init(); 
+ 1282   1          LX_MP3_Init();
+ 1283   1          LedInit();
+ 1284   1          delay_ms(500);
+ 1285   1          
+ 1286   1          Timer0_Init();
+ 1287   1          Timer1_Init();
+ 1288   1          Timer3_Init();
+ 1289   1          Timer4_Init();
+ 1290   1          delay_ms(500);
+ 1291   1      
+ 1292   1          UART1_config();
+ 1293   1          UART2_config();
+ 1294   1          UART3_config();
+ 1295   1          UART4_config();
+ 1296   1          ClearUart1Buf();
+ 1297   1          ClearUart2Buf();
+ 1298   1          ClearUart3Buf();
+ 1299   1          ClearUart4Buf();
+ 1300   1          // ¥˝CPUŒ»∂®¡À‘Ÿ∂¡≤Œ ˝
+ 1301   1          delay_ms(500);
+ 1302   1          ReadParam();
+ 1303   1          delay_ms(500);
+ 1304   1      
+ 1305   1          RUN_LED(0);
+ 1306   1      
+ 1307   1          EA = 1;     //¥Úø™◊‹÷–∂œ
+C251 COMPILER V5.60.0,  main                                                               12/11/24  14:59:45  PAGE 21  
+
+ 1308   1          SensorInit();
+ 1309   1          delay_ms(500);
+ 1310   1          InitLcd();
+ 1311   1          delay_ms(500);
+ 1312   1      //    ETH_Init();
+ 1313   1      //    delay_ms(500);
+ 1314   1          ClearCounter();
+ 1315   1          if(ProbeSwitch != 2)
+ 1316   1          {
+ 1317   2              MCP4725_OutVol(MCP4725_S1_ADDR,(char *)SysParam.Lp_Param.s_SysParam.yuzhi1);
+ 1318   2          }
+ 1319   1          WDT_CONTR |= (1<<5) |  7;  // ∆Ù∂Øø™√≈π∑£¨‘º8√Î
+ 1320   1          while(1)
+ 1321   1          {
+ 1322   2              TimerTask(); 
+ 1323   2              GetInput();
+ 1324   2              if(SysRunState.isCanReadSensor == 1)
+ 1325   2              {
+ 1326   3                  SysRunState.isCanReadSensor = 0;
+ 1327   3                  if(ProbeSwitch != 2)
+ 1328   3                  {
+ 1329   4                      CaptureSensorPluseCounter();//≤∂ªÒµ±«∞≤‚¡øΩ·π˚
+ 1330   4                  }
+ 1331   3              }
+ 1332   2      
+ 1333   2              Uart1Hnd();
+ 1334   2              Uart2Hnd();
+ 1335   2              Uart3Hnd(); 
+ 1336   2              Uart4Hnd();
+ 1337   2          }
+ 1338   1      }
+ 1339          
+ 1340          
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =      5780     ------
+  ecode size           =    ------     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =       485     ------
+  xdata-const size     =    ------     ------
+  edata size           =       344     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =       837     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

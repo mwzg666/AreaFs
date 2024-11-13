@@ -1,0 +1,22 @@
+".\obj\ISR.obj",
+".\obj\main.obj",
+".\obj\uart.obj",
+".\obj\ads1110.obj",
+".\obj\EepRom.obj",
+".\obj\i2c.obj",
+".\obj\Lcd.obj",
+".\obj\LcdApp.obj",
+".\obj\mcp4725.obj",
+".\obj\ModBus.obj",
+".\obj\ModBusDev.obj",
+".\obj\ModBusHost.obj",
+".\obj\system.obj",
+".\obj\PD_Probe.obj",
+".\obj\CalcDoseRate.obj",
+".\obj\Sensor.obj",
+".\obj\cmd.obj" 
+TO ".\obj\PileCore" 
+PRINT(".\obj\PileCore.map") CASE 
+REMOVEUNUSED 
+CLASSES (EDATA (0x0-0xFFF), 
+HDATA (0x0-0xFFF)) 

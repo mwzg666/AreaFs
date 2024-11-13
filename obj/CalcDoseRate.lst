@@ -1,0 +1,514 @@
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 1   
+
+
+C251 COMPILER V5.60.0, COMPILATION OF MODULE CalcDoseRate
+OBJECT MODULE PLACED IN .\obj\CalcDoseRate.obj
+COMPILER INVOKED BY: D:\KeilMDK\C251\BIN\C251.EXE Probe\CalcDoseRate.c XSMALL OPTIMIZE(0,SPEED) BROWSE INCDIR(.\Ads1110;
+                    -.\Flash;.\mcp4725;.\IIC;.\MwPro;.\Uart;.\Lcd;.\ModBus;.\Probe;.\BSP;.\MwPro) PRINT(.\obj\CalcDoseRate.lst) OBJECT(.\obj\
+                    -CalcDoseRate.obj) 
+
+stmt  level    source
+
+    1          #include <math.h>
+    2          #include "system.h"
+    3          #include "CalcDoseRate.h"
+    4          #include "Sensor.h"
+    5          
+    6          extern float parama,paramb,paramc,paramd;
+    7          extern LP_SYSTEM_STTAE SysRunState;
+    8          extern SYS_PARAM xdata SysParam;
+    9          
+   10          
+   11          
+   12          // 取平均值
+   13          #define CT 60   
+   14          DWORD CpsArr[CT];
+   15          static BOOL Full = FALSE;
+   16          static BYTE ArrCnt = 0;
+   17          static float CpsHis = 0;
+   18          
+   19          BYTE BackTimer = 0;
+   20          float BackAv[10] = {0.0};    //  本底平滑值
+   21          BYTE BackCnt = 0;
+   22          
+   23          void InitArr()
+   24          {
+   25   1          BYTE i;
+   26   1          // 初始状态填15 个  1
+   27   1          memset(CpsArr,0,sizeof(CpsArr));
+   28   1          for (i=0;i<CT;i+=4)
+   29   1          {
+   30   2              CpsArr[i] = 1;
+   31   2          }
+   32   1          Full = TRUE;
+   33   1          ArrCnt = CT;
+   34   1          CpsHis = 15.0/CT;
+   35   1      }
+   36          
+   37          // 将计数压入堆栈
+   38          void PushCps(DWORD cps)
+   39          {
+   40   1          BYTE i;
+   41   1          if (ArrCnt >= CT)
+   42   1          {
+   43   2              Full = TRUE;
+   44   2              for (i=1;i<CT;i++)
+   45   2              {
+   46   3                  CpsArr[i-1] = CpsArr[i];
+   47   3              }
+   48   2              CpsArr[CT-1] = cps;
+   49   2          }
+   50   1          else
+   51   1          {
+   52   2              CpsArr[ArrCnt++] = cps;
+   53   2          }
+   54   1      }
+   55          
+   56          void ClearCounter()
+   57          {
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 2   
+
+   58   1          memset(CpsArr,0,sizeof(CpsArr));
+   59   1          Full = FALSE;
+   60   1          ArrCnt = 0;
+   61   1          CpsHis = 0;
+   62   1      }
+   63          
+   64          // 本底平滑10分钟
+   65          float BackPH()
+   66          {
+   67   1          float r = 0;
+   68   1          BYTE i;
+   69   1          
+   70   1          if (++BackTimer >= CT)
+   71   1          {
+   72   2              BackTimer = 0;
+   73   2              BackAv[BackCnt++] = CounterPH();
+   74   2              if (BackCnt >= 10)
+   75   2              {
+   76   3                  // 把后面的往后移
+   77   3                  for (i=1;i<10;i++)
+   78   3                  {
+   79   4                      BackAv[i-1] = BackAv[i];
+   80   4                  }
+   81   3                  
+   82   3                  BackCnt = 9;
+   83   3              }
+   84   2          }
+   85   1      
+   86   1          if (BackCnt > 0)
+   87   1          {
+   88   2              r = 0;
+   89   2              for (i=0;i<BackCnt;i++)
+   90   2              {
+   91   3                  r += BackAv[i];
+   92   3              }
+   93   2              r /= BackCnt;
+   94   2          }
+   95   1          else
+   96   1          {
+   97   2              r = CounterPH();
+   98   2          }
+   99   1      
+  100   1          CpsHis = r;
+  101   1          return r;
+  102   1      }
+  103          
+  104          
+  105          // 计数平滑
+  106          float CounterPH()
+  107          {
+  108   1          #define BK_CPS  0.2
+  109   1          float Val = 0.0;
+  110   1          BYTE i;
+  111   1          
+  112   1          Val = 0.0;
+  113   1          if (Full)
+  114   1          {
+  115   2              for (i=0;i<CT;i++)
+  116   2              {
+  117   3                  Val += CpsArr[i];
+  118   3              }
+  119   2              Val = Val/CT;
+  120   2          }
+  121   1          else
+  122   1          {
+  123   2              if (ArrCnt == 0)
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 3   
+
+  124   2              {
+  125   3                  CpsHis = BK_CPS;
+  126   3                  return -1;
+  127   3              }
+  128   2              else
+  129   2              {
+  130   3                  for (i=0;i<ArrCnt;i++)
+  131   3                  {
+  132   4                      Val += CpsArr[i];
+  133   4                  }
+  134   3                  Val = Val/ArrCnt;
+  135   3              }
+  136   2          }
+  137   1      
+  138   1          if (Val < BK_CPS)
+  139   1          {
+  140   2              Val = BK_CPS;
+  141   2          }
+  142   1          
+  143   1          CpsHis = Val;
+  144   1          return Val;
+  145   1      }
+  146          
+  147          
+  148          float GetHis(BYTE time)
+  149          {
+  150   1          BYTE i;
+  151   1          float ret = 0.0;
+  152   1          if (Full)
+  153   1          {
+  154   2              for (i=CT-time;i<CT;i++)
+  155   2              {
+  156   3                  ret += CpsArr[i];
+  157   3              }
+  158   2      
+  159   2              return (ret/time);
+  160   2          }
+  161   1          else
+  162   1          {
+  163   2              if (time > ArrCnt)
+  164   2              {
+  165   3                  for (i=0;i<ArrCnt;i++)
+  166   3                  {
+  167   4                      ret += CpsArr[i];
+  168   4                  }
+  169   3      
+  170   3                  return (ret/ArrCnt);
+  171   3              }
+  172   2              else
+  173   2              {
+  174   3                  for (i=ArrCnt-time;i<ArrCnt;i++)
+  175   3                  {
+  176   4                      ret += CpsArr[i];
+  177   4                  }
+  178   3      
+  179   3                  return (ret/time);
+  180   3              }
+  181   2          }
+  182   1      
+  183   1          //return 0.0;
+  184   1      }
+  185          
+  186          
+  187          // time :  保留最后计数的时间
+  188          void ResvCps(BYTE time)
+  189          {
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 4   
+
+  190   1          BYTE i;
+  191   1          if (Full)
+  192   1          {
+  193   2              for (i=0;i<CT;i++)
+  194   2              {
+  195   3                  if (i<time)
+  196   3                  {
+  197   4                      CpsArr[i] = CpsArr[CT-time+i];
+  198   4                  }
+  199   3                  else
+  200   3                  {
+  201   4                      CpsArr[i] = 0;
+  202   4                  }
+  203   3              }
+  204   2              ArrCnt = time;
+  205   2              Full = FALSE;
+  206   2          }
+  207   1          else
+  208   1          {
+  209   2              if (time < ArrCnt)
+  210   2              {
+  211   3                  for (i=0;i<ArrCnt;i++)
+  212   3                  {
+  213   4                      if (i<time)
+  214   4                      {
+  215   5                          CpsArr[i] = CpsArr[ArrCnt-time+i];
+  216   5                      }
+  217   4                      else
+  218   4                      {
+  219   5                          CpsArr[i] = 0;
+  220   5                      }
+  221   4                  }
+  222   3      
+  223   3                  ArrCnt = time;
+  224   3              }
+  225   2              else
+  226   2              {
+  227   3                  // 全部保留，就不做处理了
+  228   3              }
+  229   2          }
+  230   1      }
+  231          
+  232          // 计数压入队列
+  233          void AddCounter(DWORD Cps)
+  234          {
+  235   1          PushCps(Cps);   
+  236   1      }
+  237          
+  238          
+  239          BOOL CpsFilter(DWORD Cps)
+  240          {
+  241   1          BYTE i;
+  242   1          
+  243   1          // 剂量率3-5秒响应
+  244   1          static DWORD BigCpsErr[5] = {0};
+  245   1          static BYTE BigErrCnt = 0;
+  246   1          BYTE BigCpsTime = 0;
+  247   1          
+  248   1          static DWORD SmCpsErr[5] = {0};
+  249   1          static BYTE SmErrCnt = 0;
+  250   1      
+  251   1          // 大于2CPS(0.8uSv/h左右) 才判断陡升 -- 盖格管的最小剂量为 1uSv/h
+  252   1          if ( (Cps>(CpsHis+3*sqrt(CpsHis)))  
+  253   1                && (Cps >= 2) )
+  254   1          {
+  255   2              if (Cps >= 4.0)   
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 5   
+
+  256   2              {
+  257   3                  BigCpsTime = 3;  // 3秒响应
+  258   3              }
+  259   2              else        
+  260   2              {
+  261   3                  BigCpsTime = 5;  // 5秒响应
+  262   3              }
+  263   2              
+  264   2      
+  265   2              SmErrCnt = 0;
+  266   2              BigCpsErr[BigErrCnt++] = Cps;
+  267   2              if (BigErrCnt >= BigCpsTime)
+  268   2              {
+  269   3                  // 连续3个大计数则算陡升
+  270   3                  ClearCounter();
+  271   3                  for (i=0;i<BigErrCnt;i++)
+  272   3                  {
+  273   4                      AddCounter(BigCpsErr[i]);
+  274   4                  }
+  275   3                  
+  276   3                  BigErrCnt = 0; 
+  277   3                  return TRUE;
+  278   3              }
+  279   2      
+  280   2              return FALSE;
+  281   2          }
+  282   1          
+  283   1          // 小计数
+  284   1          if (CpsHis > 9)  // >4uSv/h 
+  285   1          {
+  286   2              if (Cps < (CpsHis-3*sqrt(CpsHis))) 
+  287   2              {
+  288   3                  BigErrCnt = 0;
+  289   3                  SmCpsErr[SmErrCnt++] = Cps;
+  290   3                  if (SmErrCnt == 3)
+  291   3                  {
+  292   4                      // 连续3个小计数则算陡降
+  293   4                      ClearCounter();
+  294   4                      for (i=0;i<SmErrCnt;i++)
+  295   4                      {
+  296   5                          AddCounter(SmCpsErr[i]);
+  297   5                      }
+  298   4                      SmErrCnt = 0;
+  299   4                  }
+  300   3                  return TRUE;
+  301   3              }
+  302   2          }
+  303   1          else if (CpsHis > 4)   // 2.5uSv/h 左右
+  304   1          {
+  305   2              if (Cps < (CpsHis-2*sqrt(CpsHis))) 
+  306   2              {
+  307   3                  BigErrCnt = 0;
+  308   3                  SmCpsErr[SmErrCnt++] = Cps;
+  309   3                  if (SmErrCnt == 5)
+  310   3                  {
+  311   4                      // 连续5个小计数则算陡降
+  312   4                      ClearCounter();
+  313   4                      for (i=0;i<SmErrCnt;i++)
+  314   4                      {
+  315   5                          AddCounter(SmCpsErr[i]);
+  316   5                      }
+  317   4                      SmErrCnt = 0;
+  318   4                  }
+  319   3                  return TRUE;
+  320   3              }
+  321   2          }
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 6   
+
+  322   1      
+  323   1      
+  324   1          // 不属于突变的情况就直接进入队列
+  325   1          AddCounter(Cps);
+  326   1          BigErrCnt = 0;
+  327   1          SmErrCnt = 0;
+  328   1      
+  329   1          return FALSE;
+  330   1      }
+  331          
+  332          float GetNaIDoseRate(float cps)
+  333          {
+  334   1          float dr = 0;
+  335   1      
+  336   1          dr = NAI_K3 * cps * cps * cps + NAI_K2 * cps * cps + NAI_K1 * cps + NAI_K0;
+  337   1          if(dr < 0)
+  338   1          {
+  339   2              dr = 0;
+  340   2          }
+  341   1      
+  342   1          return dr;   // 单位 uSv/h
+  343   1      }
+  344          
+  345          
+  346          #ifdef P2P_NH
+               float CpsToUsv_h(char mode, float count)
+               {
+                   float ret;
+                   
+                   BYTE i;
+                   float a,b;
+                   
+                   if (mode == 1)
+                   {
+                       // 点对点数据拟合
+                       for (i=1;i<NH_COUNT;i++)
+                       {
+                           if (count < SysParam.Lp_Param.NhParam[i].cps)
+                           {
+                               a = (SysParam.Lp_Param.NhParam[i].dr - SysParam.Lp_Param.NhParam[i-1].dr) / 
+                                    (SysParam.Lp_Param.NhParam[i].cps - SysParam.Lp_Param.NhParam[i-1].cps);
+                               b = SysParam.Lp_Param.NhParam[i].dr - SysParam.Lp_Param.NhParam[i].cps * a;
+                               break;
+                           }
+                       }
+               
+                       if (i == NH_COUNT) 
+                       {
+                           // 计数大于最后一个拟合点，就用最后一个
+                           a = (SysParam.Lp_Param.NhParam[NH_COUNT-1].dr - SysParam.Lp_Param.NhParam[NH_COUNT-2].dr) / 
+                               (SysParam.Lp_Param.NhParam[NH_COUNT-1].cps - SysParam.Lp_Param.NhParam[NH_COUNT-2].cps);
+                           b = SysParam.Lp_Param.NhParam[NH_COUNT-1].dr - SysParam.Lp_Param.NhParam[NH_COUNT-1].cps * a;
+                       }
+               
+                       ret = a*count+b;
+                       if (ret < 0)
+                       {
+                           ret = 0;
+                       }
+                   }
+                   else   // 双GM管暂时不改 pgy 2024.2.22
+                   {
+                       ret = paramc * parama * count * exp(paramb*count);
+                   }
+                   
+                   return ret;
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 7   
+
+               }
+               #else
+  390          float CpsToUsv_h(char mode, float count)
+  391          {   
+  392   1          float ret;  
+  393   1          if (mode == 1)
+  394   1          {
+  395   2              float c = count;
+  396   2              float c2 = c*c;
+  397   2              float c3 = c2*c;
+  398   2              ret = parama + paramb*c + paramc*c2 + paramd*c3;
+  399   2          }
+  400   1          else
+  401   1          {
+  402   2              ret = paramc * parama * count * exp(paramb*count);
+  403   2          }
+  404   1          return ret;
+  405   1      }
+  406          #endif
+  407          
+  408          // 每一秒被调用一次,输入参数，返回CPS，带出剂量率
+  409          float SmothCpsCalcRate(float RealCPS, float OlduSvh, float *NewuSvh)
+  410          {
+  411   1          float CPS = 0;
+  412   1          BOOL cf;
+  413   1          
+  414   1          cf = CpsFilter((DWORD)RealCPS);    
+  415   1          //CPS = CounterPH(); //计数平滑
+  416   1          if ((CpsHis < 1) && (cf == FALSE))
+  417   1          {
+  418   2              CPS = BackPH(); 
+  419   2          }
+  420   1          else
+  421   1          {
+  422   2              BackCnt = 0;
+  423   2              BackTimer = 0;
+  424   2              CPS = CounterPH();
+  425   2          }
+  426   1          
+  427   1          if (CPS != -1)
+  428   1          {
+  429   2              #ifdef POE_SEN
+  430   2              switch(ProbeSwitch)
+  431   2              {
+  432   3                  case 0: 
+  433   3                          if(SysRunState.RealRange == LOW_SEG)
+  434   3                          {
+  435   4                              UseLowParam(CPS);
+  436   4                          }
+  437   3                                              else
+  438   3                                              {
+  439   4                                                      UseHighParam(CPS);
+  440   4                                              }
+  441   3                                              *NewuSvh = CpsToUsv_h(1, CPS); 
+  442   3                          break;
+  443   3                  case 1:
+  444   3                          *NewuSvh =  GetNaIDoseRate(CPS);
+  445   3                          break;
+  446   3              }// uSv/h
+  447   2              #else
+                       switch(ProbeSwitch)
+                       {
+                           case 0: 
+                                   *NewuSvh = CpsToUsv_h(0, CPS);   // uSv/h
+                                   break;
+                           case 1: //printf("CPS2 = %f\r\n",CPS);
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 8   
+
+                                   *NewuSvh =  GetNaIDoseRate(CPS);
+                                   break;
+                       }
+                       #endif
+  458   2          }
+  459   1          else
+  460   1          {
+  461   2              *NewuSvh = OlduSvh;
+  462   2          }
+  463   1      
+  464   1          return CPS;
+  465   1      }
+
+
+Module Information          Static   Overlayable
+------------------------------------------------
+  code size            =      2560     ------
+  ecode size           =    ------     ------
+  data size            =    ------     ------
+  idata size           =    ------     ------
+  pdata size           =    ------     ------
+  xdata size           =    ------     ------
+  xdata-const size     =    ------     ------
+  edata size           =       410     ------
+  bit size             =    ------     ------
+  ebit size            =    ------     ------
+  bitaddressable size  =    ------     ------
+  ebitaddressable size =    ------     ------
+  far data size        =    ------     ------
+  huge data size       =    ------     ------
+  const size           =    ------     ------
+  hconst size          =       130     ------
+End of Module Information.
+
+
+C251 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
