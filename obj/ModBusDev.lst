@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  ModBusDev                                                          12/11/24  14:59:46  PAGE 1   
+C251 COMPILER V5.60.0,  ModBusDev                                                          28/02/25  09:05:18  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE ModBusDev
@@ -66,7 +66,7 @@ stmt  level    source
    55   1      }
    56          
    57          
-C251 COMPILER V5.60.0,  ModBusDev                                                          12/11/24  14:59:46  PAGE 2   
+C251 COMPILER V5.60.0,  ModBusDev                                                          28/02/25  09:05:18  PAGE 2   
 
    58          void PackageWordValue(WORD Offset, WORD val)
    59          {
@@ -134,7 +134,7 @@ stmt  level    source
   121   1          WORD crc,SendLen;
   122   1          memset(&DevReadAck, 0, sizeof(DEVICE_READ_ACK));
   123   1          
-C251 COMPILER V5.60.0,  ModBusDev                                                          12/11/24  14:59:46  PAGE 3   
+C251 COMPILER V5.60.0,  ModBusDev                                                          28/02/25  09:05:18  PAGE 3   
 
   124   1          DevReadAck.Address = RecvFrame.Address; 
   125   1          DevReadAck.FunctionCode = RecvFrame.FunctionCode;
@@ -202,7 +202,7 @@ stmt  level    source
                        SysParam.Address = RecvFrame.Data[2];
                        WriteParam();
                        return true;
-C251 COMPILER V5.60.0,  ModBusDev                                                          12/11/24  14:59:46  PAGE 4   
+C251 COMPILER V5.60.0,  ModBusDev                                                          28/02/25  09:05:18  PAGE 4   
 
                    }
                
@@ -271,12 +271,12 @@ Module Information          Static   Overlayable
 ------------------------------------------------
   code size            =       671     ------
   ecode size           =    ------     ------
-C251 COMPILER V5.60.0,  ModBusDev                                                          12/11/24  14:59:46  PAGE 5   
+C251 COMPILER V5.60.0,  ModBusDev                                                          28/02/25  09:05:18  PAGE 5   
 
   data size            =    ------     ------
   idata size           =    ------     ------
   pdata size           =    ------     ------
-  xdata size           =       766     ------
+  xdata size           =       749     ------
   xdata-const size     =    ------     ------
   edata size           =        43     ------
   bit size             =    ------     ------

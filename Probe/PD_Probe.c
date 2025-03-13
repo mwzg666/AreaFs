@@ -39,7 +39,7 @@ void SendReadPD_Thr(void)
 }
 void SendReadPD_fix(void)
 {
-    WORD RegCnt = 32;
+    WORD RegCnt = 34;
     HostSendCmd(RS485, (BYTE)SysParam.Pd_param.Address,CMD_READ_REG, MODBUS_FACTOR_ADD, RegCnt, NULL);
 }
 void SendReadPD_Info(void)
@@ -74,7 +74,7 @@ void WritePD_Thr()
 
 void WritePD_fix()
 {
-    WORD RegCnt = 32;
+    WORD RegCnt = 34;
     SyncModBusDev();
     HostSendCmd(RS485,1, CMD_WRITE_REG, MODBUS_FACTOR_ADD, RegCnt, (BYTE *)&ModBusPD_Param.fix);
 }
@@ -104,29 +104,26 @@ void ModBusPDSave()
     SysParam.Pd_param.s_DoseRate.Cps3 = ModBusPD_Param.s_DoseRate.Cps3;
     //SysParam.Pd_param.s_DoseRate.DevSt = ModBusPD_Param.s_DoseRate.DevSt;
     //SysParam.Pd_param.Address = ModBusPD_Param.Address; 
-
-    #if 0
-    memcpy(SysParam.Pd_param.s_PdInfo.Index,ModBusPD_Param.s_PdInfo.Index,32);
-    memcpy(SysParam.Pd_param.s_PdInfo.Location,ModBusPD_Param.s_PdInfo.Location,32);
-    memcpy(SysParam.Pd_param.s_PdInfo.Name,ModBusPD_Param.s_PdInfo.Name,32);
-    
-    
-    SysParam.Pd_param.Ver = ModBusPD_Param.Ver; 
-    
-    
-    SysParam.Pd_param.s_Alarm.DoseRatePreAlarm = ModBusPD_Param.s_Alarm.DoseRatePreAlarm;
-    SysParam.Pd_param.s_Alarm.DoseRateAlarm = ModBusPD_Param.s_Alarm.DoseRateAlarm;
-    SysParam.Pd_param.s_Alarm.DosePreAlarm = ModBusPD_Param.s_Alarm.DosePreAlarm;
-    SysParam.Pd_param.s_Alarm.DoseAlarm = ModBusPD_Param.s_Alarm.DoseAlarm;
     for(i = 0;i<3;i++)
     {
         SysParam.Pd_param.s_Thr.Det_Thr[i] = ModBusPD_Param.s_Thr.Det_Thr[i];
     }
-    SysParam.Pd_param.s_Thr.AnalogChannel = ModBusPD_Param.s_Thr.AnalogChannel;
-    for(i = 0;i<16;i++)
+    //SysParam.Pd_param.s_Thr.AnalogChannel = ModBusPD_Param.s_Thr.AnalogChannel;
+    for(i = 0;i<17;i++)
     {
         SysParam.Pd_param.fix[i] = ModBusPD_Param.fix[i];
     }
+
+    #if 0
+    memcpy(SysParam.Pd_param.s_PdInfo.Index,ModBusPD_Param.s_PdInfo.Index,32);
+    memcpy(SysParam.Pd_param.s_PdInfo.Location,ModBusPD_Param.s_PdInfo.Location,32);
+    memcpy(SysParam.Pd_param.s_PdInfo.Name,ModBusPD_Param.s_PdInfo.Name,32);    
+    SysParam.Pd_param.Ver = ModBusPD_Param.Ver; 
+    SysParam.Pd_param.s_Alarm.DoseRatePreAlarm = ModBusPD_Param.s_Alarm.DoseRatePreAlarm;
+    SysParam.Pd_param.s_Alarm.DoseRateAlarm = ModBusPD_Param.s_Alarm.DoseRateAlarm;
+    SysParam.Pd_param.s_Alarm.DosePreAlarm = ModBusPD_Param.s_Alarm.DosePreAlarm;
+    SysParam.Pd_param.s_Alarm.DoseAlarm = ModBusPD_Param.s_Alarm.DoseAlarm;
+
     #endif
     
     WriteParam();

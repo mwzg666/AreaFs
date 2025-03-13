@@ -5,6 +5,7 @@
 #include "mcp4725.h"
 #include "ads1110.h"
 #include "sensor.h"
+#include "Lcd.h"
 
 
 extern const BYTE VERSION[];
@@ -145,7 +146,7 @@ void DataPro(u8 *cdata, u8 length)
             {
                 switch(gs_CMD.cmd)
                 {
-                    case 'C':  ACK_CMD_C();break;                   //联络命令
+                    case 'C':  ACK_CMD_C();    break;                   //联络命令
                     case 'V':  ACK_CMD_V();    break;               //读计数
                     case 'P':  ACK_CMD_P();    break;               //读脉冲
                     case 'H':  ACK_CMD_H(cdata[i+5]);    break;     //设置探测器地址
@@ -160,7 +161,8 @@ void DataPro(u8 *cdata, u8 length)
                     case 'N':  ACK_CMD_N(&cdata[i+5]);break;        //修改校准因子
                     case 'X':  ReadCS(); break;                     //读Co/Cs比
                     case 'Y':  SetCS(&cdata[i+5]); break;           //写Co/Cs比
-                    case 'E':   AlarmConfirm();    break;           //报警确认
+                    case 'E':  AlarmConfirm();    break;           //报警确认
+                    case CMD_WRITE_TIME:ACK_CMD_TIME(&cdata[i+5]);break;
                     //case 0x28:  asm(" mov &0xFFBE, PC;");  break;  //远程升级  //跳转到升级代码
 
                     #ifdef P2P_NH
@@ -308,11 +310,22 @@ void WriteFix(u8 *dat)
 输入：unsigned char SensorType:传感器类型
 输出：无
 *******************************************************************************/
-void ACK_CMD_C(void)
+void ACK_CMD_C()
 {
     SendData('C',NULL,0);
 }
 
+
+/*******************************************************************************
+功能：设置时间响应
+输入：unsigned char SensorType:传感器类型
+输出：无
+*******************************************************************************/
+void ACK_CMD_TIME(unsigned char *cdata)
+{
+    SetLcdTime(cdata);
+    SendData(CMD_WRITE_TIME,NULL,0);
+}
 
 /*******************************************************************************
 功能：设置探测器号
@@ -334,7 +347,7 @@ void ACK_CMD_H(u8 Address)
 *******************************************************************************/
 void ACK_CMD_R(void)
 {
-    PD_THR Pd_thr;
+    SEND_PD_THR Pd_thr;
 	HOST_SENSOR_PARAM Hs_ps;
 	char temp[5] = {0};
     switch(ProbeSwitch)
@@ -396,12 +409,12 @@ void ACK_CMD_R(void)
             SendData('R',(u8*)&Hs_ps,sizeof(HOST_SENSOR_PARAM));
             break;
         case 2:
-			memset(&Pd_thr,0,sizeof(PD_THR));
-            Pd_thr.Det_Thr[0]= DwordToSmall(SysParam.Pd_param.s_Thr.Det_Thr[0]);
-            Pd_thr.Det_Thr[1] = DwordToSmall(SysParam.Pd_param.s_Thr.Det_Thr[1]);
-            Pd_thr.Det_Thr[2] = DwordToSmall(SysParam.Pd_param.s_Thr.Det_Thr[2]);     
-            Pd_thr.AnalogChannel = DwordToSmall(SysParam.Pd_param.s_Thr.AnalogChannel);
-            SendData('R',(u8*)&Pd_thr,sizeof(PD_THR));
+			memset(&Pd_thr,0,sizeof(SEND_PD_THR));
+            Pd_thr.Det_Thr[0]= DwordToSmall((DWORD)SysParam.Pd_param.s_Thr.Det_Thr[0]);
+            Pd_thr.Det_Thr[1] = DwordToSmall((DWORD)SysParam.Pd_param.s_Thr.Det_Thr[1]);
+            Pd_thr.Det_Thr[2] = DwordToSmall((DWORD)SysParam.Pd_param.s_Thr.Det_Thr[2]);     
+            Pd_thr.AnalogChannel = DwordToSmall((DWORD)SysParam.Pd_param.s_Thr.AnalogChannel);
+            SendData('R',(u8*)&Pd_thr,sizeof(SEND_PD_THR));
             break;
     }
                 
@@ -417,7 +430,7 @@ void ACK_CMD_R(void)
 void ACK_CMD_W(unsigned char *cdata)
 {
 	HOST_SENSOR_PARAM Hs_ps;
-    PD_THR pd_thr;
+    SEND_PD_THR pd_thr;
 	char temp[5] = {0};
     switch(ProbeSwitch)
     {
@@ -488,11 +501,11 @@ void ACK_CMD_W(unsigned char *cdata)
            MCP4725_OutVol(MCP4725_S1_ADDR,SysParam.Lp_Param.s_SysParam.yuzhi1);
            break;
         case 2:
-            memcpy((u8*)&pd_thr,cdata,sizeof(PD_THR));
-            SysParam.Pd_param.s_Thr.Det_Thr[0] = DwordToSmall(pd_thr.Det_Thr[0]);
-            SysParam.Pd_param.s_Thr.Det_Thr[1] = DwordToSmall(pd_thr.Det_Thr[1]);
-            SysParam.Pd_param.s_Thr.Det_Thr[2] = DwordToSmall(pd_thr.Det_Thr[2]);
-            SysParam.Pd_param.s_Thr.AnalogChannel = DwordToSmall(pd_thr.AnalogChannel);
+            memcpy((u8*)&pd_thr,cdata,sizeof(SEND_PD_THR));
+            SysParam.Pd_param.s_Thr.Det_Thr[0] = (WORD)DwordToSmall(pd_thr.Det_Thr[0]);
+            SysParam.Pd_param.s_Thr.Det_Thr[1] = (WORD)DwordToSmall(pd_thr.Det_Thr[1]);
+            SysParam.Pd_param.s_Thr.Det_Thr[2] = (WORD)DwordToSmall(pd_thr.Det_Thr[2]);
+            SysParam.Pd_param.s_Thr.AnalogChannel = (WORD)DwordToSmall(pd_thr.AnalogChannel);
             break;
     }
    
@@ -557,7 +570,8 @@ void ACK_CMD_J(void)
 void ACK_CMD_V(void)
 {
     STU_DOSERATE dr;
-    PD_DOSERATE Pd_dr;
+    //PD_DOSERATE Pd_dr;
+    SEND_PD_DOSERATE Pd_dr;
     switch(ProbeSwitch)
     {
         case 0: 
@@ -603,7 +617,7 @@ void ACK_CMD_V(void)
             
             Pd_dr.DoseRate  = FloatToSmall(SysParam.Pd_param.s_DoseRate.DoseRate);
             Pd_dr.DoseTotal = FloatToSmall(SysParam.Pd_param.s_DoseRate.DoseTotal);
-            Pd_dr.DevSt     = SysParam.Pd_param.s_DoseRate.DevSt;
+            Pd_dr.DevSt     = (BYTE)SysParam.Pd_param.s_DoseRate.DevSt;
 			
 
             Pd_dr.Cps1 = FloatToSmall(SysParam.Pd_param.s_DoseRate.Cps1);
@@ -622,6 +636,7 @@ void ACK_CMD_V(void)
 void ACK_CMD_P(void)
 {
     char buf1[13],buf2[19];
+    SEND_PD_DOSERATE Pd_dr;
     switch(ProbeSwitch)
     {
         case 0: 
@@ -639,10 +654,11 @@ void ACK_CMD_P(void)
             SendData('P',(u8*)buf1,13);
             break;
         case 2:
+            Pd_dr.DevSt = (BYTE)SysParam.Pd_param.s_DoseRate.DevSt;
             sprintf(buf2,"%06ld",(long)SysParam.Pd_param.s_DoseRate.Cps1);
             sprintf(&buf2[6],"%06ld",(long)SysParam.Pd_param.s_DoseRate.Cps2);
             sprintf(&buf2[12],"%06ld",(long)SysParam.Pd_param.s_DoseRate.Cps3);
-            buf2[18] = SysParam.Pd_param.s_DoseRate.DevSt;
+            buf2[18] = Pd_dr.DevSt;
 
             SendData('P',(u8*)buf2,19);
             break;

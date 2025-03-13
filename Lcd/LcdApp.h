@@ -80,6 +80,9 @@
 #define MP_CPS_ONOFF_END    0xAA00  // CPS选择描述指针
 #define MP_CPS1_END         0xAB00  // CPS1描述指针
 #define MP_CPS2_END         0xAC00  // CPS2描述指针
+#define MP_ID_END           0xAD00  // 显示ID描述指针
+#define MP_VER_END          0xAE00  // 显示版本描述指针
+
 
 // 参数设置界面
 #define REG_SYS_PARAM               0x4000   // 屏幕参数起始地址
@@ -118,10 +121,8 @@
 #define REG_MP3_9        0x500C
 #define REG_MP3_STOP     0x500D
 
-
-
-// 关于界面
-#define REG_DEV_TYPE  0x7000    // 设备型号
+#define REG_DEV_ID  0x1300   // 设备ID显示
+#define REG_DEV_VER  0x1308   // 设备版本显示
 
 #define PAGE_START   0
 #define PAGE_MAIN   1
@@ -165,20 +166,20 @@ typedef struct
 
 typedef struct
 {
-    WORD YearH;
-    WORD YearL;
-    WORD Month;
-    WORD Day;
-    WORD Hour;
-    WORD Minute;
-    WORD Secend;
+    BYTE Year;
+    //WORD YearL;
+    BYTE Month;
+    BYTE Day;
+    BYTE Hour;
+    BYTE Minute;
+    BYTE Secend;
 }LCD_DATE_TIME;
 
 typedef struct
 {
-    char DevType[16];
-    WORD res[2];
-    char SoftVer[16];
+    char ID[16];
+    //WORD res[2];
+    char SoftVer[6];
 }DEV_INFO;
 #pragma pack()
 

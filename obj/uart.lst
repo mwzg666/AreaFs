@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  uart                                                               12/11/24  14:59:45  PAGE 1   
+C251 COMPILER V5.60.0,  uart                                                               28/02/25  09:05:17  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE uart
@@ -66,7 +66,7 @@ stmt  level    source
    56   1      
    57   1          PS  = 0;    //中断高优先级
    58   1          PSH = 0;
-C251 COMPILER V5.60.0,  uart                                                               12/11/24  14:59:45  PAGE 2   
+C251 COMPILER V5.60.0,  uart                                                               28/02/25  09:05:17  PAGE 2   
 
    59   1          //PS  = 1;    //高优先级中断
    60   1      //    ES  = 1;    //允许中断
@@ -134,7 +134,7 @@ stmt  level    source
   122   1          P_SW2 &= ~0x02; 
   123   1      
   124   1          B_TX3_Busy = 0;
-C251 COMPILER V5.60.0,  uart                                                               12/11/24  14:59:45  PAGE 3   
+C251 COMPILER V5.60.0,  uart                                                               28/02/25  09:05:17  PAGE 3   
 
   125   1          TX3_Cnt = 0;
   126   1          RX3_Cnt = 0;
@@ -202,7 +202,7 @@ stmt  level    source
   188          
   189          
   190          
-C251 COMPILER V5.60.0,  uart                                                               12/11/24  14:59:45  PAGE 4   
+C251 COMPILER V5.60.0,  uart                                                               28/02/25  09:05:17  PAGE 4   
 
   191          void UART2_int (void) interrupt 8
   192          {
@@ -270,7 +270,7 @@ stmt  level    source
   254          
   255          
   256          void Uart1Send(u8 *buf, u8 len)
-C251 COMPILER V5.60.0,  uart                                                               12/11/24  14:59:45  PAGE 5   
+C251 COMPILER V5.60.0,  uart                                                               28/02/25  09:05:17  PAGE 5   
 
   257          {
   258   1          u8 i;
@@ -338,7 +338,7 @@ stmt  level    source
   320   1          memset(RX3_Buffer,0,MAX_LENGTH);
   321   1          RX3_Cnt = 0;
   322   1      }
-C251 COMPILER V5.60.0,  uart                                                               12/11/24  14:59:45  PAGE 6   
+C251 COMPILER V5.60.0,  uart                                                               28/02/25  09:05:17  PAGE 6   
 
   323          
   324          void ClearUart4Buf()
@@ -407,7 +407,7 @@ stmt  level    source
 
 Module Information          Static   Overlayable
 ------------------------------------------------
-C251 COMPILER V5.60.0,  uart                                                               12/11/24  14:59:45  PAGE 7   
+C251 COMPILER V5.60.0,  uart                                                               28/02/25  09:05:17  PAGE 7   
 
   code size            =      1021     ------
   ecode size           =    ------     ------

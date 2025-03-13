@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 1   
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       28/02/25  09:05:18  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE CalcDoseRate
@@ -66,7 +66,7 @@ stmt  level    source
    55          
    56          void ClearCounter()
    57          {
-C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 2   
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       28/02/25  09:05:18  PAGE 2   
 
    58   1          memset(CpsArr,0,sizeof(CpsArr));
    59   1          Full = FALSE;
@@ -134,7 +134,7 @@ stmt  level    source
   121   1          else
   122   1          {
   123   2              if (ArrCnt == 0)
-C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 3   
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       28/02/25  09:05:18  PAGE 3   
 
   124   2              {
   125   3                  CpsHis = BK_CPS;
@@ -202,7 +202,7 @@ stmt  level    source
   187          // time :  保留最后计数的时间
   188          void ResvCps(BYTE time)
   189          {
-C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 4   
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       28/02/25  09:05:18  PAGE 4   
 
   190   1          BYTE i;
   191   1          if (Full)
@@ -270,7 +270,7 @@ stmt  level    source
   253   1                && (Cps >= 2) )
   254   1          {
   255   2              if (Cps >= 4.0)   
-C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 5   
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       28/02/25  09:05:18  PAGE 5   
 
   256   2              {
   257   3                  BigCpsTime = 3;  // 3秒响应
@@ -338,7 +338,7 @@ stmt  level    source
   319   3                  return TRUE;
   320   3              }
   321   2          }
-C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 6   
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       28/02/25  09:05:18  PAGE 6   
 
   322   1      
   323   1      
@@ -406,7 +406,7 @@ stmt  level    source
                    }
                    
                    return ret;
-C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 7   
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       28/02/25  09:05:18  PAGE 7   
 
                }
                #else
@@ -474,7 +474,7 @@ stmt  level    source
                                    *NewuSvh = CpsToUsv_h(0, CPS);   // uSv/h
                                    break;
                            case 1: //printf("CPS2 = %f\r\n",CPS);
-C251 COMPILER V5.60.0,  CalcDoseRate                                                       12/11/24  14:59:46  PAGE 8   
+C251 COMPILER V5.60.0,  CalcDoseRate                                                       28/02/25  09:05:18  PAGE 8   
 
                                    *NewuSvh =  GetNaIDoseRate(CPS);
                                    break;

@@ -44,6 +44,11 @@ char Unit[8];
 float My_PDDoserate = 0;
 float My_Doserate = 0;
 
+BYTE DevInfo_ShowCnt = 0;
+bool DevInfo_Showflag = false;
+
+
+
 
 alt_u8 g_Output[OUT_IO_COUNT]      = {0,0,0,0};   // 上电绿灯亮 // 
 alt_u8 g_OutStatus[OUT_IO_COUNT]   = {0,0,0,0};
@@ -134,6 +139,7 @@ void IoInit()
     P7M1 = 0x00;      P7M0 = 0x01;   //设置为准双向口          P7M0 = 0x1D;
 }
 
+//网络模块初始化
 void ETH_Init()
 { 
     ES0_M(1);
@@ -226,6 +232,7 @@ void ETH_Init()
     delay_ms(100);
 }
 
+//语音模块初始化
 void LX_MP3_Init(void)
 {
     A1(0);
@@ -241,6 +248,7 @@ void LX_MP3_Init(void)
     
 }
 
+//探头类型选择
 void ProbeSelect()      
 {
     if((D1()&&D2()))
@@ -375,14 +383,18 @@ void Task1s()
     tm++;
     if((tm == 3))
     {
-        //GetRetCode();
+         if(ProbeSwitch == 2)
+         {
+            WritePD_Thr();       
+            WritePD_fix();
+         }
     }
 
     if((tm == 6))
     {
          if(ProbeSwitch == 2)
          {
-            SendReadPD();
+            SendReadPD();       //读中子探头的数据
          }
         //GetRetCode();
     }
@@ -414,39 +426,59 @@ void Task1s()
 }
 
 
+void CheckDevInfo()
+{
+    if(DevInfo_Showflag)
+    {
+        ShowModule(MP_ID_END,REG_DEV_ID); 
+        ShowModule(MP_VER_END,REG_DEV_VER); 
+    }
+    else
+    {
+        HideModule(MP_ID_END);
+        HideModule(MP_VER_END);
+    }
+    
+}
+
+
+//报警确认按钮，长按关机，短按取消报警声
 void AlmConfirm()
 {
-//    if(SysRunState.keydownTime >= 300)//超过3秒,长按，关机
-//    {
-//      
-//        SysRunState.keydownTime = 0;
-//        PowerOff();
-//        //PW_MAIN(0);
-//    }
-    
     if((SysRunState.keydownFlag == 1)&&(POWER_LOCK()))
-   {
-       if((SysRunState.keydownTime > 10)&&(SysRunState.keydownTime < 300))//按键时间超过100ms，不超过3秒都认为短按
-       {
+    {
+        if(SysRunState.keydownTime < 100)//按键时间超过1s，不超过4秒都认为短按
+        {
             //SysRunState.keyValue = 1; 
             g_Output[ALARM_SOUND] = 0; 
-			if(MP3_StopFlag)
-			{
-			
-				if(!AlarmConfirm_flag)
-				{
-		            StopMP3(MP3_2);
-	    	        StopMP3(MP3_3);
-	        	    StartMP3(MP3_STOP);
-				}
-			}
-			AlarmConfirm_flag = true;
+            if(MP3_StopFlag)
+            {
+            
+                if(!AlarmConfirm_flag)
+                {
+                    StopMP3(MP3_2);
+                    StopMP3(MP3_3);
+                    StartMP3(MP3_STOP);
+                }
+            }
+            AlarmConfirm_flag = true;
             //StopAlmLight();
-       }
-       else if(SysRunState.keydownTime >= 300)//超过2秒,长按，关机
+        }
+        else if(SysRunState.keydownTime < 400)//按键时间超过1s，不超过4秒都认为短按
        {
-            PowerOff();
-       }
+             if(!DevInfo_Showflag)
+             {
+                 //DevInfo_ShowCnt = 1;
+                 DevInfo_Showflag = true;
+             }
+             else
+             {
+                 //DevInfo_ShowCnt = 1;
+                 DevInfo_Showflag = false;
+             }
+             CheckDevInfo();
+        }
+
        SysRunState.keydownFlag = 0;
        SysRunState.keydownTime = 0;
    }
@@ -493,7 +525,8 @@ void TimerTask()
         RunLed(delta);
         IoCtlTask();
         ProbeSelect();
-        
+        //CheckDevInfo();
+        //Cps_Check();
         Time1s += delta;
         if (Time1s >= 100)
         {
@@ -512,15 +545,15 @@ void Delay(WORD ms)
     }
 }
 
-void Delayms(WORD ms)	//@11.0592MHz
+void Delayms(WORD ms)    //@11.0592MHz
 {
-	unsigned long edata i;
+    unsigned long edata i;
     while(ms--)
     {
-    	_nop_();
-    	_nop_();
-    	i = 2763UL;
-    	while (i) i--;
+        _nop_();
+        _nop_();
+        i = 2763UL;
+        while (i) i--;
     }
 }
 
@@ -559,7 +592,6 @@ void ReadParam()
     }
 }
 
-
 void WriteParam()
 {
     EA = 0;    
@@ -576,8 +608,6 @@ void WriteParam()
 }
 
 
-
-
 void GetInput()
 {
     if(POWER_LOCK() == 0)
@@ -586,8 +616,30 @@ void GetInput()
         while(POWER_LOCK() == 0)
         {
             SysRunState.keydownFlag = 1; 
+            if(SysRunState.keydownTime >= 400)//超过4秒,长按，关机
+            {
+                SysRunState.keydownFlag = 0;
+                SysRunState.keydownTime = 0;
+                PowerOff();
+            }
+//             else if((SysRunState.keydownTime > 100)&&(SysRunState.keydownTime < 400)&&(DevInfo_ShowCnt == 0))//按键时间超过1s，不超过4秒都认为短按
+//            {
+//                if(!DevInfo_Showflag)
+//                {
+//                    DevInfo_ShowCnt = 1;
+//                    DevInfo_Showflag = true;
+//                }
+//                else
+//                {
+//                    DevInfo_ShowCnt = 1;
+//                    DevInfo_Showflag = false;
+//                }
+//                CheckDevInfo();
+//            }
         }
-         AlmConfirm();
+        
+        //DevInfo_ShowCnt = 0;
+        AlmConfirm();
     }
 }
 
@@ -685,8 +737,6 @@ void GeneralParam()
 {
     SysParam.Sign     = PARAM_SIGN;
     RunStatus.Unit = Unit_uSv;
-    SysParam.Cps_Enable = 0;
-    SysParam.Cps_Check = 0;
 
     SysParam.s_General_Info.Address = 1;
     memset(&SysParam.s_General_Info.Index,0,32); 
@@ -715,10 +765,10 @@ void DevParamDef()
 
                 #ifdef POE_SEN
                 // 低量程用Co60拟合，最后剂量率要乘Co/Cs比
-                SysParam.Lp_Param.s_Jiaozhun.DI_A = 0.071749524255754;   		// 0.0552364572191522;    				//a = 1.84773623191768
-                SysParam.Lp_Param.s_Jiaozhun.DI_B = 0.321361930688732; 			// 0.325776472823953; 					//b = 0.362602496332558
-                SysParam.Lp_Param.s_Jiaozhun.DI_C = 0.00117277837260376;		// 0.00103232522627559;					//c = 5.23843587599517E-05
-                SysParam.Lp_Param.s_Jiaozhun.DI_D = -4.45221185949912E-06;		// -3.46972129850684E-06;				//d = 2.02801464142905E-09
+                SysParam.Lp_Param.s_Jiaozhun.DI_A = 0.001749524255754;           // 0.0552364572191522;                    //a = 1.84773623191768
+                SysParam.Lp_Param.s_Jiaozhun.DI_B = 0.321361930688732;             // 0.325776472823953;                     //b = 0.362602496332558
+                SysParam.Lp_Param.s_Jiaozhun.DI_C = 0.00117277837260376;        // 0.00103232522627559;                    //c = 5.23843587599517E-05
+                SysParam.Lp_Param.s_Jiaozhun.DI_D = -4.45221185949912E-06;        // -3.46972129850684E-06;                //d = 2.02801464142905E-09
 
                 SysParam.Lp_Param.s_Jiaozhun.MID_A = 5.1735799060138;    
                 SysParam.Lp_Param.s_Jiaozhun.MID_B = 0.314778799356561; 
@@ -726,10 +776,10 @@ void DevParamDef()
                 SysParam.Lp_Param.s_Jiaozhun.MID_D = -6.40204890256851E-08;
                 
                 // Cs137 > 1.2m
-                SysParam.Lp_Param.s_Jiaozhun.GAO_A = 3.62608397252143;			//684.399049164029; 
-                SysParam.Lp_Param.s_Jiaozhun.GAO_B = 6.3652408143604;			//6.14300026842352; 
-                SysParam.Lp_Param.s_Jiaozhun.GAO_C = 0.00160225788737462;		//5.3028356929535E-05;  
-                SysParam.Lp_Param.s_Jiaozhun.GAO_D = -1.72769678770162E-06;		//9.30859286124393E-10;
+                SysParam.Lp_Param.s_Jiaozhun.GAO_A = 3.62608397252143;            //684.399049164029; 
+                SysParam.Lp_Param.s_Jiaozhun.GAO_B = 6.3652408143604;            //6.14300026842352; 
+                SysParam.Lp_Param.s_Jiaozhun.GAO_C = 0.00160225788737462;        //5.3028356929535E-05;  
+                SysParam.Lp_Param.s_Jiaozhun.GAO_D = -1.72769678770162E-06;        //9.30859286124393E-10;
                 #else
                 SysParam.Lp_Param.s_Jiaozhun.DI_A = 0.5593;    // 0.56;
                 SysParam.Lp_Param.s_Jiaozhun.DI_B = 0.000119; // 0.00017;
@@ -794,7 +844,7 @@ void DevParamDef()
                 memcpy((char *)&SysParam.Lp_Param.NhParam, (char *)&NhDef, sizeof(NH_PARAM)*NH_COUNT);
                 #endif
                 
-                for (i=0;i<FIX_COUNT;i++)
+                for (i=0;i<FIX_COUNT;i++) //NaI分段乘的系数     1,2：0.67；3:1.22；4:1；5:0.87；6:1.83；7:1.8；8:1；9:1.12
                 {
                     SysParam.Lp_Param.Fix[i] = 1.0;
                 }
@@ -805,9 +855,10 @@ void DevParamDef()
                 SysParam.Pd_param.s_Alarm.DoseAlarm = 400;        //400uSv
                 SysParam.Pd_param.s_Alarm.DoseRatePreAlarm = 300;//300uSv/h
                 SysParam.Pd_param.s_Alarm.DoseRateAlarm = 400;    //400uSv/h
-                SysParam.Pd_param.s_Thr.Det_Thr[0] = 255-30;
+                SysParam.Pd_param.s_Thr.Det_Thr[0] = 255-25;
                 SysParam.Pd_param.s_Thr.Det_Thr[1] = 10;
                 SysParam.Pd_param.s_Thr.Det_Thr[2] = 150;
+                SysParam.Pd_param.s_Thr.AnalogChannel = 0;
                 for(i = 0;i<PD_FIXNUM;i++)
                 {
                     SysParam.Pd_param.fix[i] = 1.0;
@@ -855,8 +906,10 @@ void InitLcd()
     ShowIcon(MP_SCALE_END+1,36);
     delay_ms(200);
     HideControl();
-    delay_ms(20);
-    
+    delay_ms(200);
+    HideModule(MP_ID_END);
+    delay_ms(200);
+    HideModule(MP_VER_END);
     //SendParam();
     //delay_ms(200);
     //SetBkLight(false);
@@ -866,6 +919,7 @@ void InitLcd()
 }
 
 
+//char转Unicode
 void Char2Unicode(char *buff,BYTE len)
 {
     BYTE i = 0;
@@ -876,6 +930,7 @@ void Char2Unicode(char *buff,BYTE len)
     }
 }
 
+//获取剂量率等数据
 void GetDoseRate()
 {
     char drbuff[5] = {0};
@@ -901,7 +956,7 @@ void GetDoseRate()
                     time = 0;
                 } 
                 CalcAlarmState(&SysRunState);
-				My_Doserate = SysRunState.s_DoseMSG.DoseRate;
+                My_Doserate = SysRunState.s_DoseMSG.DoseRate;
                 //printf("DoseRate1 = %f\r\n",SysRunState.s_DoseMSG.DoseRate);
                 Set_LP_DoseRateUnit(); 
                 #endif
@@ -931,6 +986,7 @@ void GetDoseRate()
     LcdCmd(LCD_CMD_WRITE, REG_SCALE_UNIT, (BYTE *)RunInfo.Unit,8);
 }
 
+//显示剂量率和刻度指针
 void CheckDoseRate()
 {
     WORD deg = 0,i = 0;
@@ -965,6 +1021,8 @@ void CheckDoseRate()
     ShowSpin(deg);
 }
 
+
+//语音模块播放
 void StartMP3(BYTE id)
 {
     switch(id)
@@ -991,6 +1049,8 @@ void StartMP3(BYTE id)
     }
 }
 
+
+//语音模块停止播放
 void StopMP3(BYTE id)
 {
     switch(id)
@@ -1019,6 +1079,7 @@ void StopMP3(BYTE id)
 
 }
 
+//停止声光报警
 void StopAlmLight()
 {
     g_Output[LIGHT_GREEN] = 0;
@@ -1038,19 +1099,20 @@ void StopAlmLight()
         MP3_StopFlag = 0;
     }
     AlarmConfirm_flag = false;
-    
 }
+
+//报警情况获取
 void AbnorAlarm()
 {   
     bool HaveAlarm = false;
-	
+    
     if((DoseRateAlarm == ALM_DOSERATE_PRE)||(DoseRateAlarm == ALM_DOSE_PRE))
     {
         HaveAlarm = true;
-		RunInfo.FsIcon = 1;
+        RunInfo.FsIcon = 1;
         ShowIcon(REG_STATUS,1);
         g_Output[LIGHT_RED] = 1;
-		g_Output[LIGHT_GREEN] = 1;
+        g_Output[LIGHT_GREEN] = 1;
         ShowIcon(MP_SCALE_END+1,37);
         ShowBorderY();
         if(!AlarmConfirm_flag)
@@ -1064,10 +1126,10 @@ void AbnorAlarm()
         ||(DoseRateAlarm == ALM_DOSE_OVER))
     {
         HaveAlarm = true;
-		RunInfo.FsIcon = 2;
+        RunInfo.FsIcon = 2;
         ShowIcon(REG_STATUS,2);
         g_Output[LIGHT_RED] = 1;
-		g_Output[LIGHT_GREEN] = 0;
+        g_Output[LIGHT_GREEN] = 0;
         ShowIcon(MP_SCALE_END+1,38);
         ShowBorderR();
         if(!AlarmConfirm_flag)
@@ -1079,23 +1141,24 @@ void AbnorAlarm()
     else
     {
         HaveAlarm = false;
-	}
+    }
     if (HaveAlarm)
     {
         MP3_StopFlag = 1;
-		if(!AlarmConfirm_flag)
+        if(!AlarmConfirm_flag)
         {
-         	g_Output[ALARM_SOUND] = 1;
+             g_Output[ALARM_SOUND] = 1;
         }
     }
     else
     {
-    	RunInfo.FsIcon = 0;
+        RunInfo.FsIcon = 0;
         ShowIcon(REG_STATUS,0);
         ShowIcon(MP_SCALE_END+1,36);
         StopAlmLight();
     }
 }
+
 void CheckAlarm()
 {
     switch(ProbeSwitch)
@@ -1187,12 +1250,12 @@ void DevRun()
 
     // 2. 显示剂量率和状态
     ShowDoseRate();
-    //delay_ms(200);
-    
-    // 3. 检查报警状态  
+    // 3. 显示地址和版本
+    ShowDevInfo();
+    // 4. 检查报警状态  
     if (RunStatus.RunTime > 5)
     {
-    	RunStatus.RunTime = 6;
+        RunStatus.RunTime = 6;
         // 运行时间大于10秒才检测
         CheckAlarm();
     }
@@ -1203,8 +1266,8 @@ void DevRun()
 void SyncModBusDev()
 {
     BYTE i;
-    SysParam.Pd_param.Address =  SysParam.s_General_Info.Address;
-    ModBusPD_Param.Address = SysParam.Pd_param.Address;
+    //SysParam.Pd_param.Address =  SysParam.s_General_Info.Address;
+    //ModBusPD_Param.Address = SysParam.Pd_param.Address;
     //ModBusPD_Param.Ver = SysParam.Pd_param.Ver;
     //sprintf(ModBusAddr.Ver,"V%d.%d.%d", SysParam.Ver/100, SysParam.Ver%100/10, SysParam.Ver%10 );
 //    memset(&ModBusPD_Param.s_DoseRate, 0, sizeof(PD_DOSERATE));
@@ -1229,12 +1292,12 @@ void SyncModBusDev()
     ModBusPD_Param.s_Thr.AnalogChannel = SysParam.Pd_param.s_Thr.AnalogChannel;
 
     memset(&ModBusPD_Param.fix, 0, sizeof(ModBusPD_Param.fix));
-    for(i = 0;i < 16;i++)
+    for(i = 0;i < 17;i++)
     {
         ModBusPD_Param.fix[i] = SysParam.Pd_param.fix[i];
     }
 
-    memset(&ModBusPD_Param.s_PdInfo, 0, sizeof(PD_INFO));
+    //memset(&ModBusPD_Param.s_PdInfo, 0, sizeof(PD_INFO));
         
     //memcpy(SysParam.Pd_param.s_PdInfo.Name,SysParam.s_General_Info.Name,32);
     //memcpy(ModBusPD_Param.s_PdInfo.Index,SysParam.Pd_param.s_PdInfo.Index,32);

@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  system                                                             12/11/24  14:59:46  PAGE 1   
+C251 COMPILER V5.60.0,  system                                                             28/02/25  09:05:18  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE system
@@ -66,7 +66,7 @@ stmt  level    source
    56          // 当前版本: VER1.0
    57          // 修改日期: 2024.6.13
    58          // 当前作者:
-C251 COMPILER V5.60.0,  system                                                             12/11/24  14:59:46  PAGE 2   
+C251 COMPILER V5.60.0,  system                                                             28/02/25  09:05:18  PAGE 2   
 
    59          // 其他备注: 
    60          //========================================================================
@@ -134,7 +134,7 @@ stmt  level    source
   122   1      }
   123          
   124          //========================================================================
-C251 COMPILER V5.60.0,  system                                                             12/11/24  14:59:46  PAGE 3   
+C251 COMPILER V5.60.0,  system                                                             28/02/25  09:05:18  PAGE 3   
 
   125          // 函数名称: u32 GetCounter(void)
   126          // 函数功能: 获取TIMER3的脉冲计数
@@ -202,7 +202,7 @@ stmt  level    source
   188   1          LowOverCnt3++;
   189   1         
   190   1      }
-C251 COMPILER V5.60.0,  system                                                             12/11/24  14:59:46  PAGE 4   
+C251 COMPILER V5.60.0,  system                                                             28/02/25  09:05:18  PAGE 4   
 
   191          
   192          void Timer4_Isr() interrupt 20      //Timer4中断

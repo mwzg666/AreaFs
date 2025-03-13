@@ -55,7 +55,7 @@ char *PopChar();
 
 void EnterPage(BYTE Page);
 void GetLcdTime();
-void SetLcdTime();
+void SetLcdTime(unsigned char *cTime);
 void SetBkLight(bool s);
 void SetTextColor(WORD mp, WORD color);
 void SetTextIntegerNum(WORD mp, WORD Num);

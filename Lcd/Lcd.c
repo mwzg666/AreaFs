@@ -265,27 +265,28 @@ void GetLcdTime()
 }
 
 
-void SetLcdTime()
+void SetLcdTime(unsigned char *cTime)
 {
     LCD_DATE_TIME  ldt;
     BYTE dt[8] = {0};
     
-    if (!CheckDataLen(7))
-    {
-        return;
-    }
+    memcpy((u8*)&ldt,cTime,sizeof(LCD_DATE_TIME));
+//    if (!CheckDataLen(7))
+//    {
+//        return;
+//    }
 
-    ldt.YearH  = PopWord();
-    ldt.YearL  = PopWord();
-    ldt.Month  = PopWord();
-    ldt.Day    = PopWord();
-    ldt.Hour   = PopWord();
-    ldt.Minute = PopWord();
-    ldt.Secend = PopWord();
+//    ldt.Year  = PopWord();
+//    //ldt.YearL  = PopWord();
+//    ldt.Month  = PopWord();
+//    ldt.Day    = PopWord();
+//    ldt.Hour   = PopWord();
+//    ldt.Minute = PopWord();
+//    ldt.Secend = PopWord();
 
     dt[0] = 0x5A;
     dt[1] = 0xA5;
-    dt[2] = (BYTE)(ldt.YearH*10+ldt.YearL);
+    dt[2] = (BYTE)ldt.Year;
     dt[3] = (BYTE)ldt.Month;
     dt[4] = (BYTE)ldt.Day;
 
@@ -294,7 +295,7 @@ void SetLcdTime()
     dt[7] = (BYTE)ldt.Secend;
 
     LcdCmd(LCD_CMD_WRITE, LCD_SET_RTC, dt, 8);
-    NeedGetRet = true;
+    //NeedGetRet = true;
 }
 
 void SetBkLight(bool s)
@@ -325,13 +326,13 @@ void SetTextColor(WORD mp, WORD color)
 
 void HideControl()
 {
-    BYTE dat[] = {0x5A,0xA5,00,01,0x0F,0x0D,00,00};
+    BYTE dat[] = {0x5A,0xA5,00,00,01,0x0D,00,00};
     LcdCmd(LCD_CMD_WRITE, 0x00B0, (BYTE *)&dat, 8);
 }
 
 void ShowControl()
 {
-    BYTE dat[] = {0x5A,0xA5,00,01,0x0F,0x0D,00,01};
+    BYTE dat[] = {0x5A,0xA5,00,00,01,0x0D,00,01};
     LcdCmd(LCD_CMD_WRITE, 0x00B0, (BYTE *)&dat, 8);
 }
 

@@ -56,8 +56,9 @@ void ShowDevInfo()
 {
     memset(&DevInfo, 0, sizeof(DEV_INFO));
 
-    sprintf(DevInfo.SoftVer,"V%d.%d.%d", VERSION/100, VERSION%100/10, VERSION%10 );
-    LcdCmd(LCD_CMD_WRITE, REG_DEV_TYPE, (BYTE *)&DevInfo, 32);
+    sprintf(DevInfo.ID,"ID:%d", SysParam.s_General_Info.Address);
+    sprintf(DevInfo.SoftVer,"%s", SysParam.VerSion);
+    LcdCmd(LCD_CMD_WRITE, REG_DEV_ID, (BYTE *)&DevInfo, 22);
 }
 
 
@@ -262,8 +263,8 @@ void SetCurTime()
     
     memcpy(dt, &pFrame->Data[1], 8);
     
-    ldt.YearH = SwWord((WORD)(dt[0]/10));
-    ldt.YearL = SwWord((WORD)(dt[0]%10));
+    ldt.Year = SwWord((WORD)(dt[0]/10));
+    //ldt.YearL = SwWord((WORD)(dt[0]%10));
     ldt.Month = SwWord((WORD)dt[1]);
     ldt.Day   = SwWord((WORD)dt[2]);
 
@@ -299,12 +300,12 @@ void ReadReg()
     switch (addr)
     {
         // 主界面
-        case REG_TIME_BTN: GetLcdTime();                            break;  // 点击时间
+        //case REG_TIME_BTN: GetLcdTime();                            break;  // 点击时间
 
         // 修改时间
-        case REG_ADJ_TIME:   GetInputTime();                        break;    // 时间修改完成，点击了返回按钮
-        case REG_DATE_TIME:  SetLcdTime();                          break;    // 修改屏幕RTC      
-        case LCD_REG_RTC:    SetCurTime();                          break;   // 获取屏幕时间返回     
+        //case REG_ADJ_TIME:   GetInputTime();                        break;    // 时间修改完成，点击了返回按钮
+        //case REG_DATE_TIME:  SetLcdTime();                          break;    // 修改屏幕RTC      
+        //case LCD_REG_RTC:    SetCurTime();                          break;   // 获取屏幕时间返回     
         //CPS显示
         case REG_CPS_CHECK:  SysParam.Cps_Check = (BYTE)PopWord(); Cps_Check(); break;   // CPS通道显示按钮
         case REG_CPS_ONOFF:  SysParam.Cps_Enable = (BYTE)PopWord();   break;   // CPS通道按钮

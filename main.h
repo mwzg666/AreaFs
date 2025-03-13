@@ -150,11 +150,10 @@ typedef enum
 #define YELLOW    1
 #define BLUE      2
 
-
-#define NAI_K0     0.149434802297712    	//0.149429067085229
-#define NAI_K1     0.00278922406291244    	//0.00577694678584278
-#define NAI_K2     3.84151853056591E-08    	//1.64786140335038E-07
-#define NAI_K3     2.43281836203998E-13    	//2.16163629786135E-12
+#define NAI_K0      0.0000124264931333855         //0.149434802297712    	    //0.149429067085229
+#define NAI_K1      0.00467903650870694	          //0.00278922406291244    	    //0.00577694678584278
+#define NAI_K2      9.635213697987E-09		      //3.84151853056591E-08    	//1.64786140335038E-07
+#define NAI_K3      -1.72215004037806E-13         //2.43281836203998E-13    	//2.16163629786135E-12
 
 
 typedef struct
@@ -186,12 +185,24 @@ typedef struct
 {
     float DoseRate;   
     float DoseTotal;
+    DWORD DevSt;
+    float Cps1;
+    float Cps2;
+    float Cps3;
+}PD_DOSERATE;
+
+typedef struct
+{
+    float DoseRate;   
+    float DoseTotal;
     float res;
     float Cps1;
     float Cps2;
-	BYTE DevSt;
+    BYTE DevSt;
     float Cps3;
-}PD_DOSERATE;
+}SEND_PD_DOSERATE;
+
+
 
 typedef struct
 {
@@ -213,10 +224,18 @@ typedef struct
 
 typedef struct
 {
+	//float res[2];
+    WORD Det_Thr[3];                 //探测器阈值(0-255)
+    WORD AnalogChannel;             //模拟通道
+}PD_THR;
+
+typedef struct
+{
 	float res[2];
     DWORD Det_Thr[3];                 //探测器阈值(0-255)
     DWORD AnalogChannel;             //模拟通道
-}PD_THR;
+}SEND_PD_THR;
+
 
 typedef struct
 {
@@ -247,7 +266,7 @@ typedef struct
 #define LP_VER "V1.9.6"    //最长6个字节
 #endif
 
-#define DEV_VER "V1.0.4"    //最长6个字节
+#define DEV_VER "V1.0.5"    //最长6个字节
 #define BD_BK   0.1
 
 #ifndef POE_SEN

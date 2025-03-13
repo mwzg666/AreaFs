@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 1   
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE cmd
@@ -15,215 +15,217 @@ stmt  level    source
     5          #include "mcp4725.h"
     6          #include "ads1110.h"
     7          #include "sensor.h"
-    8          
+    8          #include "Lcd.h"
     9          
-   10          extern const BYTE VERSION[];
-   11          extern alt_u8 g_Output[];
-   12          extern SYS_PARAM xdata SysParam;
-   13          
-   14          STU_CMD s_Head={0x02};
-   15          u8 sendbuf[200];
-   16          
-   17          // 51单片机是大端的，通过结构体发送的数据要转换为小端
-   18          DWORD DwordToSmall(DWORD dat)
-   19          {
-   20   1              BYTE buf[4];
-   21   1          BYTE t;
-   22   1          DWORD ret;
-   23   1          
-   24   1          memcpy(buf, &dat, 4);
-   25   1              t = buf[3];
-   26   1              buf[3] = buf[0];
-   27   1              buf[0] = t;
-   28   1              t = buf[2];
-   29   1              buf[2] = buf[1];
-   30   1              buf[1] = t;
-   31   1      
-   32   1          memcpy(&ret, buf, 4);
-   33   1          return ret;
-   34   1      }
-   35          
-   36          WORD WordToSmall(WORD dat)
-   37          {
-   38   1              BYTE buf[2];
-   39   1          BYTE t;
-   40   1          WORD ret;
-   41   1          
-   42   1          memcpy(buf, &dat, 2);
-   43   1              t = buf[1];
-   44   1              buf[0] = buf[1];
-   45   1              buf[1] = t;
-   46   1              
-   47   1          memcpy(&ret, buf, 2);
-   48   1          return ret;
-   49   1      }
-   50          
-   51          float FloatToSmall(float dat)
-   52          {
-   53   1              BYTE buf[4];
-   54   1          BYTE t;
-   55   1          float ret;
-   56   1          
-   57   1          memcpy(buf, &dat, 4);
-   58   1              t = buf[3];
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 2   
+   10          
+   11          extern const BYTE VERSION[];
+   12          extern alt_u8 g_Output[];
+   13          extern SYS_PARAM xdata SysParam;
+   14          
+   15          STU_CMD s_Head={0x02};
+   16          u8 sendbuf[200];
+   17          
+   18          // 51单片机是大端的，通过结构体发送的数据要转换为小端
+   19          DWORD DwordToSmall(DWORD dat)
+   20          {
+   21   1              BYTE buf[4];
+   22   1          BYTE t;
+   23   1          DWORD ret;
+   24   1          
+   25   1          memcpy(buf, &dat, 4);
+   26   1              t = buf[3];
+   27   1              buf[3] = buf[0];
+   28   1              buf[0] = t;
+   29   1              t = buf[2];
+   30   1              buf[2] = buf[1];
+   31   1              buf[1] = t;
+   32   1      
+   33   1          memcpy(&ret, buf, 4);
+   34   1          return ret;
+   35   1      }
+   36          
+   37          WORD WordToSmall(WORD dat)
+   38          {
+   39   1              BYTE buf[2];
+   40   1          BYTE t;
+   41   1          WORD ret;
+   42   1          
+   43   1          memcpy(buf, &dat, 2);
+   44   1              t = buf[1];
+   45   1              buf[0] = buf[1];
+   46   1              buf[1] = t;
+   47   1              
+   48   1          memcpy(&ret, buf, 2);
+   49   1          return ret;
+   50   1      }
+   51          
+   52          float FloatToSmall(float dat)
+   53          {
+   54   1              BYTE buf[4];
+   55   1          BYTE t;
+   56   1          float ret;
+   57   1          
+   58   1          memcpy(buf, &dat, 4);
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 2   
 
-   59   1              buf[3] = buf[0];
-   60   1              buf[0] = t;
-   61   1              t = buf[2];
-   62   1              buf[2] = buf[1];
-   63   1              buf[1] = t;
-   64   1      
-   65   1          memcpy(&ret, buf, 4);
-   66   1          return ret;
-   67   1      }
-   68          
-   69          //向上位机发送命令
-   70          void SendData(u8 cmd, u8 *cdata, u8 length)
-   71          {
-   72   1          u8 sumCheck=0,i;
-   73   1          s_Head.head = 0x02;
-   74   1          s_Head.length = length + 8;
-   75   1          switch(ProbeSwitch)
-   76   1          {
-   77   2              case 0:s_Head.type = 0x21;  break;      //0x21<->GM管; 0x22<->NaI; 0x23<->中子
-   78   2              case 1:s_Head.type = 0x22;  break;
-   79   2              case 2:s_Head.type = 0x23;  break;
-   80   2          }               
-   81   1          s_Head.Id = SysParam.s_General_Info.Address;
-   82   1          s_Head.cmd = cmd;
-   83   1          memcpy(sendbuf,(u8*)&s_Head,sizeof(STU_CMD));
-   84   1          if(length>0)
-   85   1          {
-   86   2              memcpy(&sendbuf[sizeof(STU_CMD)],cdata,length);
-   87   2          }
-   88   1          for(i=0;i<length+4;i++)
-   89   1          {
-   90   2                sumCheck += sendbuf[i+1];
-   91   2          }
-   92   1          sprintf((char*)&sendbuf[length+sizeof(STU_CMD)],"%02X",sumCheck);
-   93   1          sendbuf[length+sizeof(STU_CMD)+2] = 3;
-   94   1          Uart2Send(sendbuf,(u8)(length+8));
-   95   1      
-   96   1      }
-   97          
-   98          void AlarmConfirm()
-   99          {
-  100   1          SysRunState.s_DoseMSG.Dose = 0;   // 清累计剂量
-  101   1          SysRunState.s_DoseMSG.State = 0; // 清报警状态
-  102   1          SysParam.Pd_param.s_DoseRate.DevSt = 0;
-  103   1          SysParam.Pd_param.s_DoseRate.DoseTotal = 0;
-  104   1          
-  105   1          SendData('E',NULL,0);
-  106   1      }
-  107          
+   59   1              t = buf[3];
+   60   1              buf[3] = buf[0];
+   61   1              buf[0] = t;
+   62   1              t = buf[2];
+   63   1              buf[2] = buf[1];
+   64   1              buf[1] = t;
+   65   1      
+   66   1          memcpy(&ret, buf, 4);
+   67   1          return ret;
+   68   1      }
+   69          
+   70          //向上位机发送命令
+   71          void SendData(u8 cmd, u8 *cdata, u8 length)
+   72          {
+   73   1          u8 sumCheck=0,i;
+   74   1          s_Head.head = 0x02;
+   75   1          s_Head.length = length + 8;
+   76   1          switch(ProbeSwitch)
+   77   1          {
+   78   2              case 0:s_Head.type = 0x21;  break;      //0x21<->GM管; 0x22<->NaI; 0x23<->中子
+   79   2              case 1:s_Head.type = 0x22;  break;
+   80   2              case 2:s_Head.type = 0x23;  break;
+   81   2          }               
+   82   1          s_Head.Id = SysParam.s_General_Info.Address;
+   83   1          s_Head.cmd = cmd;
+   84   1          memcpy(sendbuf,(u8*)&s_Head,sizeof(STU_CMD));
+   85   1          if(length>0)
+   86   1          {
+   87   2              memcpy(&sendbuf[sizeof(STU_CMD)],cdata,length);
+   88   2          }
+   89   1          for(i=0;i<length+4;i++)
+   90   1          {
+   91   2                sumCheck += sendbuf[i+1];
+   92   2          }
+   93   1          sprintf((char*)&sendbuf[length+sizeof(STU_CMD)],"%02X",sumCheck);
+   94   1          sendbuf[length+sizeof(STU_CMD)+2] = 3;
+   95   1          Uart2Send(sendbuf,(u8)(length+8));
+   96   1      
+   97   1      }
+   98          
+   99          void AlarmConfirm()
+  100          {
+  101   1          SysRunState.s_DoseMSG.Dose = 0;   // 清累计剂量
+  102   1          SysRunState.s_DoseMSG.State = 0; // 清报警状态
+  103   1          SysParam.Pd_param.s_DoseRate.DevSt = 0;
+  104   1          SysParam.Pd_param.s_DoseRate.DoseTotal = 0;
+  105   1          
+  106   1          SendData('E',NULL,0);
+  107   1      }
   108          
-  109          /*******************************************************************************
-  110          功能：命令分析与执行
-  111          输入：U32 id:指令ID号
-  112                unsigned char dlc: 数据长度
-  113                unsigned char *pdata:数据指针
-  114          输出：无
-  115          *******************************************************************************/
-  116          STU_CMD gs_CMD={0};
-  117          void DataPro(u8 *cdata, u8 length)
-  118          {  
-  119   1          u16 i,j;
-  120   1          u8 checkOut = 0;
-  121   1          char checkOutbuf[3] = {0};
-  122   1          
-  123   1          //for(i=0;i<length; i++)
-  124   1          i = 0;
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 3   
+  109          
+  110          /*******************************************************************************
+  111          功能：命令分析与执行
+  112          输入：U32 id:指令ID号
+  113                unsigned char dlc: 数据长度
+  114                unsigned char *pdata:数据指针
+  115          输出：无
+  116          *******************************************************************************/
+  117          STU_CMD gs_CMD={0};
+  118          void DataPro(u8 *cdata, u8 length)
+  119          {  
+  120   1          u16 i,j;
+  121   1          u8 checkOut = 0;
+  122   1          char checkOutbuf[3] = {0};
+  123   1          
+  124   1          //for(i=0;i<length; i++)
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 3   
 
-  125   1          {
-  126   2              if(cdata[i] == 0x02)
-  127   2              {
-  128   3                  memcpy(&gs_CMD,&cdata[i],sizeof(STU_CMD));
-  129   3                  if((gs_CMD.length > length)||(cdata[gs_CMD.length-1] != 0x03)
-  130   3                     ||(!(gs_CMD.Id == SysParam.s_General_Info.Address)))
-  131   3                     // ||(!((gs_CMD.type == SysRunState.SensorType+0x11)||(gs_CMD.type == 0xff))    
-  132   3                  {
-  133   4                      if(gs_CMD.Id != 0xff)
-  134   4                      {
-  135   5                          return;  
-  136   5                      }              
-  137   4                  }
-  138   3                  
-  139   3                  for(j=0; j< gs_CMD.length-4; j++)
-  140   3                  {
-  141   4                        checkOut += cdata[i+j+1];
-  142   4                  }
-  143   3                  sprintf(checkOutbuf,"%02X",checkOut);
-  144   3                  if(memcmp(checkOutbuf,&cdata[i+gs_CMD.length]-3,2) == 0)
-  145   3                  {
-  146   4                      switch(gs_CMD.cmd)
-  147   4                      {
-  148   5                          case 'C':  ACK_CMD_C();break;                   //联络命令
-  149   5                          case 'V':  ACK_CMD_V();    break;               //读计数
-  150   5                          case 'P':  ACK_CMD_P();    break;               //读脉冲
-  151   5                          case 'H':  ACK_CMD_H(cdata[i+5]);    break;     //设置探测器地址
-  152   5                          case 'B':  ACK_CMD_B(&cdata[i+5]);break;        //写报警参数
-  153   5                          case 'W':  ACK_CMD_W(&cdata[i+5]); break;       //写参数
-  154   5                          case 'F':  ACK_CMD_F();break;                   //读报警参数
-  155   5                          case 'R':  ACK_CMD_R();break;                   //读参数
-  156   5                          case 'T':  ACK_CMD_T();break;                   //测温
-  157   5                          case 'Q':  ACK_CMD_Q(cdata[i+5]);break;         //量程查询或者设置
-  158   5                          case 'M':  ACK_CMD_M();break;                   //软件版本o
-  159   5                          case 'J':  ACK_CMD_J();break;                   //读校准因子
-  160   5                          case 'N':  ACK_CMD_N(&cdata[i+5]);break;        //修改校准因子
-  161   5                          case 'X':  ReadCS(); break;                     //读Co/Cs比
-  162   5                          case 'Y':  SetCS(&cdata[i+5]); break;           //写Co/Cs比
-  163   5                          case 'E':   AlarmConfirm();    break;           //报警确认
-  164   5                          //case 0x28:  asm(" mov &0xFFBE, PC;");  break;  //远程升级  //跳转到升级代码
-  165   5      
-  166   5                          #ifdef P2P_NH
+  125   1          i = 0;
+  126   1          {
+  127   2              if(cdata[i] == 0x02)
+  128   2              {
+  129   3                  memcpy(&gs_CMD,&cdata[i],sizeof(STU_CMD));
+  130   3                  if((gs_CMD.length > length)||(cdata[gs_CMD.length-1] != 0x03)
+  131   3                     ||(!(gs_CMD.Id == SysParam.s_General_Info.Address)))
+  132   3                     // ||(!((gs_CMD.type == SysRunState.SensorType+0x11)||(gs_CMD.type == 0xff))    
+  133   3                  {
+  134   4                      if(gs_CMD.Id != 0xff)
+  135   4                      {
+  136   5                          return;  
+  137   5                      }              
+  138   4                  }
+  139   3                  
+  140   3                  for(j=0; j< gs_CMD.length-4; j++)
+  141   3                  {
+  142   4                        checkOut += cdata[i+j+1];
+  143   4                  }
+  144   3                  sprintf(checkOutbuf,"%02X",checkOut);
+  145   3                  if(memcmp(checkOutbuf,&cdata[i+gs_CMD.length]-3,2) == 0)
+  146   3                  {
+  147   4                      switch(gs_CMD.cmd)
+  148   4                      {
+  149   5                          case 'C':  ACK_CMD_C();    break;                   //联络命令
+  150   5                          case 'V':  ACK_CMD_V();    break;               //读计数
+  151   5                          case 'P':  ACK_CMD_P();    break;               //读脉冲
+  152   5                          case 'H':  ACK_CMD_H(cdata[i+5]);    break;     //设置探测器地址
+  153   5                          case 'B':  ACK_CMD_B(&cdata[i+5]);break;        //写报警参数
+  154   5                          case 'W':  ACK_CMD_W(&cdata[i+5]); break;       //写参数
+  155   5                          case 'F':  ACK_CMD_F();break;                   //读报警参数
+  156   5                          case 'R':  ACK_CMD_R();break;                   //读参数
+  157   5                          case 'T':  ACK_CMD_T();break;                   //测温
+  158   5                          case 'Q':  ACK_CMD_Q(cdata[i+5]);break;         //量程查询或者设置
+  159   5                          case 'M':  ACK_CMD_M();break;                   //软件版本o
+  160   5                          case 'J':  ACK_CMD_J();break;                   //读校准因子
+  161   5                          case 'N':  ACK_CMD_N(&cdata[i+5]);break;        //修改校准因子
+  162   5                          case 'X':  ReadCS(); break;                     //读Co/Cs比
+  163   5                          case 'Y':  SetCS(&cdata[i+5]); break;           //写Co/Cs比
+  164   5                          case 'E':  AlarmConfirm();    break;           //报警确认
+  165   5                          case CMD_WRITE_TIME:ACK_CMD_TIME(&cdata[i+5]);break;
+  166   5                          //case 0x28:  asm(" mov &0xFFBE, PC;");  break;  //远程升级  //跳转到升级代码
+  167   5      
+  168   5                          #ifdef P2P_NH
                                    // 点对点拟合 add by pgy 2024-2-20  
                                    case CMD_READ_NH:  ReadNh();   break;               // 读拟合数据
                                    case CMD_WRITE_NH: WriteNh(&cdata[i+5]);    break; // 写拟合数据
                                    #endif
-  171   5      
-  172   5                          case CMD_READ_FIX:  ReadFix();   break; 
-  173   5                          case CMD_WRITE_FIX:  WriteFix(&cdata[i+5]);   break; 
-  174   5                          case CMD_READ_INFO: ACK_CMD_RINFO();break;
-  175   5                          case CMD_WRITE_INFO: ACK_CMD_WINFO(&cdata[i+5]);break;
-  176   5                          default:
-  177   5                          break;
-  178   5                      }
-  179   4                      i += (gs_CMD.length+4);
-  180   4                  }
-  181   3              }
-  182   2          }
-  183   1      }
-  184          
-  185          
-  186          void ReadCS()
-  187          {
-  188   1          float Cocs;
-  189   1          if(ProbeSwitch !=2)
-  190   1          {
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 4   
+  173   5      
+  174   5                          case CMD_READ_FIX:  ReadFix();   break; 
+  175   5                          case CMD_WRITE_FIX:  WriteFix(&cdata[i+5]);   break; 
+  176   5                          case CMD_READ_INFO: ACK_CMD_RINFO();break;
+  177   5                          case CMD_WRITE_INFO: ACK_CMD_WINFO(&cdata[i+5]);break;
+  178   5                          default:
+  179   5                          break;
+  180   5                      }
+  181   4                      i += (gs_CMD.length+4);
+  182   4                  }
+  183   3              }
+  184   2          }
+  185   1      }
+  186          
+  187          
+  188          void ReadCS()
+  189          {
+  190   1          float Cocs;
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 4   
 
-  191   2              Cocs = FloatToSmall(SysParam.Lp_Param.CoCsRate);
-  192   2              SendData('X',(u8*)&Cocs,4);
-  193   2          }
-  194   1      }
-  195          
-  196          void SetCS(u8 *cs)
-  197          {
-  198   1          float Cocs;
-  199   1          if(ProbeSwitch !=2)
-  200   1          {
-  201   2              memcpy(&Cocs,cs, 4);  
-  202   2              SysParam.Lp_Param.CoCsRate = FloatToSmall(Cocs);
-  203   2              SendData('Y',NULL,0);
-  204   2          }
-  205   1          SaveParam();
-  206   1      }  
-  207          
-  208          void ReadNh()
-  209          {
-  210   1          #ifdef P2P_NH
+  191   1          if(ProbeSwitch !=2)
+  192   1          {
+  193   2              Cocs = FloatToSmall(SysParam.Lp_Param.CoCsRate);
+  194   2              SendData('X',(u8*)&Cocs,4);
+  195   2          }
+  196   1      }
+  197          
+  198          void SetCS(u8 *cs)
+  199          {
+  200   1          float Cocs;
+  201   1          if(ProbeSwitch !=2)
+  202   1          {
+  203   2              memcpy(&Cocs,cs, 4);  
+  204   2              SysParam.Lp_Param.CoCsRate = FloatToSmall(Cocs);
+  205   2              SendData('Y',NULL,0);
+  206   2          }
+  207   1          SaveParam();
+  208   1      }  
+  209          
+  210          void ReadNh()
+  211          {
+  212   1          #ifdef P2P_NH
                    BYTE i = 0;
                    if(ProbeSwitch !=2)
                    {
@@ -234,11 +236,11 @@ stmt  level    source
                        SendData(CMD_READ_NH,(u8*)&SysParam.Lp_Param.NhParam,sizeof(NH_PARAM)*NH_COUNT);
                    }
                    #endif
-  221   1      }
-  222          
-  223          void WriteNh(u8 *dat)
-  224          {
-  225   1          #ifdef P2P_NH
+  223   1      }
+  224          
+  225          void WriteNh(u8 *dat)
+  226          {
+  227   1          #ifdef P2P_NH
                    BYTE i = 0;
                    if(ProbeSwitch !=2)
                    {
@@ -251,643 +253,657 @@ stmt  level    source
                        SendData(CMD_WRITE_NH,NULL,0);
                    }
                    #endif
-  238   1          SaveParam();
-  239   1          
-  240   1      }
-*** WARNING C47 IN LINE 223 OF MwPro\cmd.c: 'dat': unreferenced parameter
-  241          
-  242          void ReadFix()
-  243          {
-  244   1          BYTE i = 0;
-  245   1          switch(ProbeSwitch)
-  246   1          {
-  247   2              case 0:
-  248   2                  for(i = 0;i < FIX_COUNT;i++)
-  249   2                  {
-  250   3                     SysParam.Lp_Param.Fix[i] =  FloatToSmall(SysParam.Lp_Param.Fix[i]);
-  251   3                  }
-  252   2                  SendData(CMD_READ_FIX,(u8*)&SysParam.Lp_Param.Fix,sizeof(float)*FIX_COUNT);
-  253   2                  break;
-  254   2              case 1:
-  255   2                  for(i = 0;i < FIX_COUNT;i++)
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 5   
+  240   1          SaveParam();
+  241   1          
+  242   1      }
+*** WARNING C47 IN LINE 225 OF MwPro\cmd.c: 'dat': unreferenced parameter
+  243          
+  244          void ReadFix()
+  245          {
+  246   1          BYTE i = 0;
+  247   1          switch(ProbeSwitch)
+  248   1          {
+  249   2              case 0:
+  250   2                  for(i = 0;i < FIX_COUNT;i++)
+  251   2                  {
+  252   3                     SysParam.Lp_Param.Fix[i] =  FloatToSmall(SysParam.Lp_Param.Fix[i]);
+  253   3                  }
+  254   2                  SendData(CMD_READ_FIX,(u8*)&SysParam.Lp_Param.Fix,sizeof(float)*FIX_COUNT);
+  255   2                  break;
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 5   
 
-  256   2                  {
-  257   3                     SysParam.Lp_Param.Fix[i] =  FloatToSmall(SysParam.Lp_Param.Fix[i]);
-  258   3                  }
-  259   2                  SendData(CMD_READ_FIX,(u8*)&SysParam.Lp_Param.Fix,sizeof(float)*FIX_COUNT);
-  260   2                  break;
-  261   2              case 2:
-  262   2                  for(i = 0;i < PD_FIXNUM;i++)
-  263   2                  {
-  264   3                     SysParam.Pd_param.fix[i] =  FloatToSmall(SysParam.Pd_param.fix[i]);
-  265   3                  }
-  266   2                  SendData(CMD_READ_FIX,(u8*)&SysParam.Pd_param.fix ,sizeof(float)*PD_FIXNUM);
-  267   2                  break;
-  268   2          }
-  269   1          
-  270   1      }
-  271          
-  272          void WriteFix(u8 *dat)
-  273          {
-  274   1          BYTE i = 0;
-  275   1          switch(ProbeSwitch)
-  276   1          {
-  277   2              case 0: 
-  278   2                  memcpy((u8*)&SysParam.Lp_Param.Fix,dat,sizeof(float)*FIX_COUNT);
-  279   2                  for(i = 0;i < FIX_COUNT;i++)
-  280   2                  {
-  281   3                     SysParam.Lp_Param.Fix[i] =  FloatToSmall(SysParam.Lp_Param.Fix[i]);
-  282   3                  }
-  283   2                 
-  284   2                  break;
-  285   2              case 1:
-  286   2                  memcpy((u8*)&SysParam.Lp_Param.Fix,dat,sizeof(float)*FIX_COUNT);
-  287   2                  for(i = 0;i < FIX_COUNT;i++)
-  288   2                  {
-  289   3                     SysParam.Lp_Param.Fix[i] =  FloatToSmall(SysParam.Lp_Param.Fix[i]);
-  290   3                  }
-  291   2                  
-  292   2                  break;
-  293   2              case 2:
-  294   2                  memcpy((u8*)&SysParam.Pd_param.fix,dat,sizeof(float)*PD_FIXNUM);
-  295   2                  for(i = 0;i < PD_FIXNUM;i++)
-  296   2                  {
-  297   3                     SysParam.Lp_Param.Fix[i] =  FloatToSmall(SysParam.Lp_Param.Fix[i]);
-  298   3                  }
-  299   2                  
-  300   2                  break;
-  301   2          }    
-  302   1          SendData(CMD_WRITE_FIX,NULL,0);
-  303   1          SaveParam();
-  304   1      }
-  305          
-  306          /*******************************************************************************
-  307          功能：联络命令响应
-  308          输入：unsigned char SensorType:传感器类型
-  309          输出：无
-  310          *******************************************************************************/
-  311          void ACK_CMD_C(void)
-  312          {
-  313   1          SendData('C',NULL,0);
-  314   1      }
-  315          
-  316          
-  317          /*******************************************************************************
-  318          功能：设置探测器号
-  319          输入：
-  320          输出：
-  321          *******************************************************************************/
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 6   
+  256   2              case 1:
+  257   2                  for(i = 0;i < FIX_COUNT;i++)
+  258   2                  {
+  259   3                     SysParam.Lp_Param.Fix[i] =  FloatToSmall(SysParam.Lp_Param.Fix[i]);
+  260   3                  }
+  261   2                  SendData(CMD_READ_FIX,(u8*)&SysParam.Lp_Param.Fix,sizeof(float)*FIX_COUNT);
+  262   2                  break;
+  263   2              case 2:
+  264   2                  for(i = 0;i < PD_FIXNUM;i++)
+  265   2                  {
+  266   3                     SysParam.Pd_param.fix[i] =  FloatToSmall(SysParam.Pd_param.fix[i]);
+  267   3                  }
+  268   2                  SendData(CMD_READ_FIX,(u8*)&SysParam.Pd_param.fix ,sizeof(float)*PD_FIXNUM);
+  269   2                  break;
+  270   2          }
+  271   1          
+  272   1      }
+  273          
+  274          void WriteFix(u8 *dat)
+  275          {
+  276   1          BYTE i = 0;
+  277   1          switch(ProbeSwitch)
+  278   1          {
+  279   2              case 0: 
+  280   2                  memcpy((u8*)&SysParam.Lp_Param.Fix,dat,sizeof(float)*FIX_COUNT);
+  281   2                  for(i = 0;i < FIX_COUNT;i++)
+  282   2                  {
+  283   3                     SysParam.Lp_Param.Fix[i] =  FloatToSmall(SysParam.Lp_Param.Fix[i]);
+  284   3                  }
+  285   2                 
+  286   2                  break;
+  287   2              case 1:
+  288   2                  memcpy((u8*)&SysParam.Lp_Param.Fix,dat,sizeof(float)*FIX_COUNT);
+  289   2                  for(i = 0;i < FIX_COUNT;i++)
+  290   2                  {
+  291   3                     SysParam.Lp_Param.Fix[i] =  FloatToSmall(SysParam.Lp_Param.Fix[i]);
+  292   3                  }
+  293   2                  
+  294   2                  break;
+  295   2              case 2:
+  296   2                  memcpy((u8*)&SysParam.Pd_param.fix,dat,sizeof(float)*PD_FIXNUM);
+  297   2                  for(i = 0;i < PD_FIXNUM;i++)
+  298   2                  {
+  299   3                     SysParam.Lp_Param.Fix[i] =  FloatToSmall(SysParam.Lp_Param.Fix[i]);
+  300   3                  }
+  301   2                  
+  302   2                  break;
+  303   2          }    
+  304   1          SendData(CMD_WRITE_FIX,NULL,0);
+  305   1          SaveParam();
+  306   1      }
+  307          
+  308          /*******************************************************************************
+  309          功能：联络命令响应
+  310          输入：unsigned char SensorType:传感器类型
+  311          输出：无
+  312          *******************************************************************************/
+  313          void ACK_CMD_C()
+  314          {
+  315   1          SendData('C',NULL,0);
+  316   1      }
+  317          
+  318          
+  319          /*******************************************************************************
+  320          功能：设置时间响应
+  321          输入：unsigned char SensorType:传感器类型
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 6   
 
-  322          
-  323          void ACK_CMD_H(u8 Address)
-  324          {
-  325   1          SysParam.s_General_Info.Address = Address;
-  326   1          SendData('H',NULL,0);
-  327   1          SaveParam();
+  322          输出：无
+  323          *******************************************************************************/
+  324          void ACK_CMD_TIME(unsigned char *cdata)
+  325          {
+  326   1          SetLcdTime(cdata);
+  327   1          SendData(CMD_WRITE_TIME,NULL,0);
   328   1      }
   329          
   330          /*******************************************************************************
-  331          功能：读命令(R)响应
-  332          输入：无
-  333          输出：无
+  331          功能：设置探测器号
+  332          输入：
+  333          输出：
   334          *******************************************************************************/
-  335          void ACK_CMD_R(void)
-  336          {
-  337   1          PD_THR Pd_thr;
-  338   1              HOST_SENSOR_PARAM Hs_ps;
-  339   1              char temp[5] = {0};
-  340   1          switch(ProbeSwitch)
-  341   1          {
-  342   2              case 0: 
-  343   2                              memset(&Hs_ps,0,sizeof(HOST_SENSOR_PARAM));
-  344   2                      
-  345   2                  Hs_ps.Canshu1 = FloatToSmall(SysParam.Lp_Param.s_SysParam.Canshu1);
-  346   2                  Hs_ps.Canshu2 = FloatToSmall(SysParam.Lp_Param.s_SysParam.Canshu2);
-  347   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi1,4);
-  348   2                              Hs_ps.Thr1 = atoi(temp);
-  349   2                              Hs_ps.Thr1 = DwordToSmall(Hs_ps.Thr1);
-  350   2      
-  351   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi2,4);
-  352   2                              Hs_ps.Thr2 = atoi(temp);
-  353   2                              Hs_ps.Thr2 = DwordToSmall(Hs_ps.Thr2);
-  354   2      
-  355   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi3,4);
-  356   2                              Hs_ps.Thr3 = atoi(temp);
-  357   2                              Hs_ps.Thr3 = DwordToSmall(Hs_ps.Thr3);
-  358   2      
-  359   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.PingHuaShiJian,4);
-  360   2                              Hs_ps.Time = atoi(temp);
-  361   2                              Hs_ps.Time = DwordToSmall(Hs_ps.Time);
-  362   2                              
-  363   2                  //memcpy(ps.yuzhi1,SysParam.Lp_Param.s_SysParam.yuzhi1,4);
-  364   2                  //memcpy(ps.yuzhi2,SysParam.Lp_Param.s_SysParam.yuzhi2,4);
-  365   2                  //memcpy(ps.PingHuaShiJian,SysParam.Lp_Param.s_SysParam.PingHuaShiJian,4);  
-  366   2      
-  367   2                  SendData('R',(u8*)&Hs_ps,sizeof(HOST_SENSOR_PARAM));
-  368   2                  break;
-  369   2                  
-  370   2              case 1:  
-  371   2                              memset(&Hs_ps,0,sizeof(HOST_SENSOR_PARAM));
-  372   2                      
-  373   2                  Hs_ps.Canshu1 = FloatToSmall(SysParam.Lp_Param.s_SysParam.Canshu1);
-  374   2                  Hs_ps.Canshu2 = FloatToSmall(SysParam.Lp_Param.s_SysParam.Canshu2);
-  375   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi1,4);
-  376   2                              Hs_ps.Thr1 = atoi(temp);
-  377   2                              Hs_ps.Thr1 = DwordToSmall(Hs_ps.Thr1);
-  378   2      
-  379   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi2,4);
-  380   2                              Hs_ps.Thr2 = atoi(temp);
-  381   2                              Hs_ps.Thr2 = DwordToSmall(Hs_ps.Thr2);
-  382   2      
-  383   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi3,4);
-  384   2                              Hs_ps.Thr3 = atoi(temp);
-  385   2                              Hs_ps.Thr3 = DwordToSmall(Hs_ps.Thr3);
-  386   2      
-  387   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.PingHuaShiJian,4);
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 7   
+  335          
+  336          void ACK_CMD_H(u8 Address)
+  337          {
+  338   1          SysParam.s_General_Info.Address = Address;
+  339   1          SendData('H',NULL,0);
+  340   1          SaveParam();
+  341   1      }
+  342          
+  343          /*******************************************************************************
+  344          功能：读命令(R)响应
+  345          输入：无
+  346          输出：无
+  347          *******************************************************************************/
+  348          void ACK_CMD_R(void)
+  349          {
+  350   1          SEND_PD_THR Pd_thr;
+  351   1              HOST_SENSOR_PARAM Hs_ps;
+  352   1              char temp[5] = {0};
+  353   1          switch(ProbeSwitch)
+  354   1          {
+  355   2              case 0: 
+  356   2                              memset(&Hs_ps,0,sizeof(HOST_SENSOR_PARAM));
+  357   2                      
+  358   2                  Hs_ps.Canshu1 = FloatToSmall(SysParam.Lp_Param.s_SysParam.Canshu1);
+  359   2                  Hs_ps.Canshu2 = FloatToSmall(SysParam.Lp_Param.s_SysParam.Canshu2);
+  360   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi1,4);
+  361   2                              Hs_ps.Thr1 = atoi(temp);
+  362   2                              Hs_ps.Thr1 = DwordToSmall(Hs_ps.Thr1);
+  363   2      
+  364   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi2,4);
+  365   2                              Hs_ps.Thr2 = atoi(temp);
+  366   2                              Hs_ps.Thr2 = DwordToSmall(Hs_ps.Thr2);
+  367   2      
+  368   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi3,4);
+  369   2                              Hs_ps.Thr3 = atoi(temp);
+  370   2                              Hs_ps.Thr3 = DwordToSmall(Hs_ps.Thr3);
+  371   2      
+  372   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.PingHuaShiJian,4);
+  373   2                              Hs_ps.Time = atoi(temp);
+  374   2                              Hs_ps.Time = DwordToSmall(Hs_ps.Time);
+  375   2                              
+  376   2                  //memcpy(ps.yuzhi1,SysParam.Lp_Param.s_SysParam.yuzhi1,4);
+  377   2                  //memcpy(ps.yuzhi2,SysParam.Lp_Param.s_SysParam.yuzhi2,4);
+  378   2                  //memcpy(ps.PingHuaShiJian,SysParam.Lp_Param.s_SysParam.PingHuaShiJian,4);  
+  379   2      
+  380   2                  SendData('R',(u8*)&Hs_ps,sizeof(HOST_SENSOR_PARAM));
+  381   2                  break;
+  382   2                  
+  383   2              case 1:  
+  384   2                              memset(&Hs_ps,0,sizeof(HOST_SENSOR_PARAM));
+  385   2                      
+  386   2                  Hs_ps.Canshu1 = FloatToSmall(SysParam.Lp_Param.s_SysParam.Canshu1);
+  387   2                  Hs_ps.Canshu2 = FloatToSmall(SysParam.Lp_Param.s_SysParam.Canshu2);
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 7   
 
-  388   2                              Hs_ps.Time = atoi(temp);
-  389   2                              Hs_ps.Time = DwordToSmall(Hs_ps.Time);
-  390   2      
-  391   2                              
-  392   2                  //memcpy(ps.yuzhi1,SysParam.Lp_Param.s_SysParam.yuzhi1,4);
-  393   2                  //memcpy(ps.yuzhi2,SysParam.Lp_Param.s_SysParam.yuzhi2,4);
-  394   2                  //memcpy(ps.PingHuaShiJian,SysParam.Lp_Param.s_SysParam.PingHuaShiJian,4);  
+  388   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi1,4);
+  389   2                              Hs_ps.Thr1 = atoi(temp);
+  390   2                              Hs_ps.Thr1 = DwordToSmall(Hs_ps.Thr1);
+  391   2      
+  392   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi2,4);
+  393   2                              Hs_ps.Thr2 = atoi(temp);
+  394   2                              Hs_ps.Thr2 = DwordToSmall(Hs_ps.Thr2);
   395   2      
-  396   2                  SendData('R',(u8*)&Hs_ps,sizeof(HOST_SENSOR_PARAM));
-  397   2                  break;
-  398   2              case 2:
-  399   2                              memset(&Pd_thr,0,sizeof(PD_THR));
-  400   2                  Pd_thr.Det_Thr[0]= DwordToSmall(SysParam.Pd_param.s_Thr.Det_Thr[0]);
-  401   2                  Pd_thr.Det_Thr[1] = DwordToSmall(SysParam.Pd_param.s_Thr.Det_Thr[1]);
-  402   2                  Pd_thr.Det_Thr[2] = DwordToSmall(SysParam.Pd_param.s_Thr.Det_Thr[2]);     
-  403   2                  Pd_thr.AnalogChannel = DwordToSmall(SysParam.Pd_param.s_Thr.AnalogChannel);
-  404   2                  SendData('R',(u8*)&Pd_thr,sizeof(PD_THR));
-  405   2                  break;
-  406   2          }
-  407   1                      
-  408   1          
-  409   1      }
-  410              
-  411          
-  412          /*******************************************************************************
-  413          功能：写参数命令(W)响应
-  414          输入：unsigned char *pdata:参数
-  415          输出：无
-  416          *******************************************************************************/
-  417          void ACK_CMD_W(unsigned char *cdata)
-  418          {
-  419   1              HOST_SENSOR_PARAM Hs_ps;
-  420   1          PD_THR pd_thr;
-  421   1              char temp[5] = {0};
-  422   1          switch(ProbeSwitch)
-  423   1          {
-  424   2              case 0: 
-  425   2                  memcpy((u8*)&Hs_ps,cdata,sizeof(HOST_SENSOR_PARAM));
-  426   2                    
-  427   2                  SysParam.Lp_Param.s_SysParam.Canshu1 = FloatToSmall(Hs_ps.Canshu1);
-  428   2                  SysParam.Lp_Param.s_SysParam.Canshu2 = FloatToSmall(Hs_ps.Canshu2);
-  429   2                              Hs_ps.Thr1 = DwordToSmall(Hs_ps.Thr1);
-  430   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr1);
-  431   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi1,temp,4);
-  432   2      
-  433   2                              Hs_ps.Thr2 = DwordToSmall(Hs_ps.Thr2);
-  434   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr2);
-  435   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi2,temp,4);
-  436   2      
-  437   2                          Hs_ps.Thr3 = DwordToSmall(Hs_ps.Thr3);
-  438   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr3);
-  439   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi3,temp,4);
-  440   2      
-  441   2                          Hs_ps.Time = DwordToSmall(Hs_ps.Time);
-  442   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Time);
-  443   2                              memcpy(SysParam.Lp_Param.s_SysParam.PingHuaShiJian,temp,4);
-  444   2      
-  445   2                         
-  446   2                 //memcpy(SysParam.Lp_Param.s_SysParam.yuzhi1,wcm.yuzhi1,4);
-  447   2                 //memcpy(SysParam.Lp_Param.s_SysParam.yuzhi2,wcm.yuzhi2,4);
-  448   2                 //memcpy(SysParam.Lp_Param.s_SysParam.PingHuaShiJian,wcm.PingHuaShiJian,4);
-  449   2              
-  450   2                 #ifndef POE_SEN
-                                  //SysRunState.stParam.s_Jiaozhun.DI_C = SysRunState.stParam.s_SysParam.Canshu1;
-                                  //SysRunState.stParam.s_Jiaozhun.GAO_C = SysRunState.stParam.s_SysParam.Canshu2;
-                                  RefreshParam();
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 8   
+  396   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.yuzhi3,4);
+  397   2                              Hs_ps.Thr3 = atoi(temp);
+  398   2                              Hs_ps.Thr3 = DwordToSmall(Hs_ps.Thr3);
+  399   2      
+  400   2                              memcpy(temp,SysParam.Lp_Param.s_SysParam.PingHuaShiJian,4);
+  401   2                              Hs_ps.Time = atoi(temp);
+  402   2                              Hs_ps.Time = DwordToSmall(Hs_ps.Time);
+  403   2      
+  404   2                              
+  405   2                  //memcpy(ps.yuzhi1,SysParam.Lp_Param.s_SysParam.yuzhi1,4);
+  406   2                  //memcpy(ps.yuzhi2,SysParam.Lp_Param.s_SysParam.yuzhi2,4);
+  407   2                  //memcpy(ps.PingHuaShiJian,SysParam.Lp_Param.s_SysParam.PingHuaShiJian,4);  
+  408   2      
+  409   2                  SendData('R',(u8*)&Hs_ps,sizeof(HOST_SENSOR_PARAM));
+  410   2                  break;
+  411   2              case 2:
+  412   2                              memset(&Pd_thr,0,sizeof(SEND_PD_THR));
+  413   2                  Pd_thr.Det_Thr[0]= DwordToSmall((DWORD)SysParam.Pd_param.s_Thr.Det_Thr[0]);
+  414   2                  Pd_thr.Det_Thr[1] = DwordToSmall((DWORD)SysParam.Pd_param.s_Thr.Det_Thr[1]);
+  415   2                  Pd_thr.Det_Thr[2] = DwordToSmall((DWORD)SysParam.Pd_param.s_Thr.Det_Thr[2]);     
+  416   2                  Pd_thr.AnalogChannel = DwordToSmall((DWORD)SysParam.Pd_param.s_Thr.AnalogChannel);
+  417   2                  SendData('R',(u8*)&Pd_thr,sizeof(SEND_PD_THR));
+  418   2                  break;
+  419   2          }
+  420   1                      
+  421   1          
+  422   1      }
+  423              
+  424          
+  425          /*******************************************************************************
+  426          功能：写参数命令(W)响应
+  427          输入：unsigned char *pdata:参数
+  428          输出：无
+  429          *******************************************************************************/
+  430          void ACK_CMD_W(unsigned char *cdata)
+  431          {
+  432   1              HOST_SENSOR_PARAM Hs_ps;
+  433   1          SEND_PD_THR pd_thr;
+  434   1              char temp[5] = {0};
+  435   1          switch(ProbeSwitch)
+  436   1          {
+  437   2              case 0: 
+  438   2                  memcpy((u8*)&Hs_ps,cdata,sizeof(HOST_SENSOR_PARAM));
+  439   2                    
+  440   2                  SysParam.Lp_Param.s_SysParam.Canshu1 = FloatToSmall(Hs_ps.Canshu1);
+  441   2                  SysParam.Lp_Param.s_SysParam.Canshu2 = FloatToSmall(Hs_ps.Canshu2);
+  442   2                              Hs_ps.Thr1 = DwordToSmall(Hs_ps.Thr1);
+  443   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr1);
+  444   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi1,temp,4);
+  445   2      
+  446   2                              Hs_ps.Thr2 = DwordToSmall(Hs_ps.Thr2);
+  447   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr2);
+  448   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi2,temp,4);
+  449   2      
+  450   2                          Hs_ps.Thr3 = DwordToSmall(Hs_ps.Thr3);
+  451   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr3);
+  452   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi3,temp,4);
+  453   2      
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 8   
 
-                          #endif
-  455   2                 MCP4725_OutVol(MCP4725_S1_ADDR,SysParam.Lp_Param.s_SysParam.yuzhi1);
-  456   2                 break;
-  457   2              case 1:  
-  458   2                  memcpy((u8*)&Hs_ps,cdata,sizeof(LP_SYS_PRAM));
-  459   2                    
-  460   2                 SysParam.Lp_Param.s_SysParam.Canshu1 = FloatToSmall(Hs_ps.Canshu1);
-  461   2                 SysParam.Lp_Param.s_SysParam.Canshu2 = FloatToSmall(Hs_ps.Canshu2);
-  462   2                         Hs_ps.Thr1 = DwordToSmall(Hs_ps.Thr1);
-  463   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr1);
-  464   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi1,temp,4);
-  465   2      
-  466   2                              Hs_ps.Thr2 = DwordToSmall(Hs_ps.Thr2);
-  467   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr2);
-  468   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi2,temp,4);
-  469   2      
-  470   2                          Hs_ps.Thr3 = DwordToSmall(Hs_ps.Thr3);
-  471   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr3);
-  472   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi3,temp,4);
-  473   2      
-  474   2                          Hs_ps.Time = DwordToSmall(Hs_ps.Time);
-  475   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Time);
-  476   2                              memcpy(SysParam.Lp_Param.s_SysParam.PingHuaShiJian,temp,4);
-  477   2      
-  478   2                         
-  479   2                 //memcpy(SysParam.Lp_Param.s_SysParam.yuzhi1,wcm.yuzhi1,4);
-  480   2                 //memcpy(SysParam.Lp_Param.s_SysParam.yuzhi2,wcm.yuzhi2,4);
-  481   2                 //memcpy(SysParam.Lp_Param.s_SysParam.PingHuaShiJian,wcm.PingHuaShiJian,4);
-  482   2              
-  483   2                 #ifndef POE_SEN
+  454   2                          Hs_ps.Time = DwordToSmall(Hs_ps.Time);
+  455   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Time);
+  456   2                              memcpy(SysParam.Lp_Param.s_SysParam.PingHuaShiJian,temp,4);
+  457   2      
+  458   2                         
+  459   2                 //memcpy(SysParam.Lp_Param.s_SysParam.yuzhi1,wcm.yuzhi1,4);
+  460   2                 //memcpy(SysParam.Lp_Param.s_SysParam.yuzhi2,wcm.yuzhi2,4);
+  461   2                 //memcpy(SysParam.Lp_Param.s_SysParam.PingHuaShiJian,wcm.PingHuaShiJian,4);
+  462   2              
+  463   2                 #ifndef POE_SEN
                                   //SysRunState.stParam.s_Jiaozhun.DI_C = SysRunState.stParam.s_SysParam.Canshu1;
                                   //SysRunState.stParam.s_Jiaozhun.GAO_C = SysRunState.stParam.s_SysParam.Canshu2;
                                   RefreshParam();
                           #endif
-  488   2                 MCP4725_OutVol(MCP4725_S1_ADDR,SysParam.Lp_Param.s_SysParam.yuzhi1);
-  489   2                 break;
-  490   2              case 2:
-  491   2                  memcpy((u8*)&pd_thr,cdata,sizeof(PD_THR));
-  492   2                  SysParam.Pd_param.s_Thr.Det_Thr[0] = DwordToSmall(pd_thr.Det_Thr[0]);
-  493   2                  SysParam.Pd_param.s_Thr.Det_Thr[1] = DwordToSmall(pd_thr.Det_Thr[1]);
-  494   2                  SysParam.Pd_param.s_Thr.Det_Thr[2] = DwordToSmall(pd_thr.Det_Thr[2]);
-  495   2                  SysParam.Pd_param.s_Thr.AnalogChannel = DwordToSmall(pd_thr.AnalogChannel);
-  496   2                  break;
-  497   2          }
-  498   1         
-  499   1          SendData('W',NULL,0);
-  500   1          SaveParam();
-  501   1      }
-  502          
-  503          
-  504          
-  505          /*******************************************************************************
-  506          功能：写校准因子(M)响应
-  507          输入：unsigned char SensorType:传感器类型
-  508          输出：无
-  509          *******************************************************************************/
-  510          void ACK_CMD_N(unsigned char *cdata)
-  511          {
-  512   1          SYS_JIAOZHUNYINZI Jzyz_w;   
-  513   1          if(ProbeSwitch !=2)
-  514   1          {
-  515   2              memcpy((u8*)&Jzyz_w,cdata,sizeof(SYS_JIAOZHUNYINZI));
-  516   2              SysParam.Lp_Param.s_Jiaozhun.DI_A = FloatToSmall(Jzyz_w.DI_A);
-  517   2              SysParam.Lp_Param.s_Jiaozhun.DI_B = FloatToSmall(Jzyz_w.DI_B);
-  518   2              SysParam.Lp_Param.s_Jiaozhun.DI_C = FloatToSmall(Jzyz_w.DI_C);
-  519   2              SysParam.Lp_Param.s_Jiaozhun.GAO_A = FloatToSmall(Jzyz_w.GAO_A);
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 9   
+  468   2                 MCP4725_OutVol(MCP4725_S1_ADDR,SysParam.Lp_Param.s_SysParam.yuzhi1);
+  469   2                 break;
+  470   2              case 1:  
+  471   2                  memcpy((u8*)&Hs_ps,cdata,sizeof(LP_SYS_PRAM));
+  472   2                    
+  473   2                 SysParam.Lp_Param.s_SysParam.Canshu1 = FloatToSmall(Hs_ps.Canshu1);
+  474   2                 SysParam.Lp_Param.s_SysParam.Canshu2 = FloatToSmall(Hs_ps.Canshu2);
+  475   2                         Hs_ps.Thr1 = DwordToSmall(Hs_ps.Thr1);
+  476   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr1);
+  477   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi1,temp,4);
+  478   2      
+  479   2                              Hs_ps.Thr2 = DwordToSmall(Hs_ps.Thr2);
+  480   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr2);
+  481   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi2,temp,4);
+  482   2      
+  483   2                          Hs_ps.Thr3 = DwordToSmall(Hs_ps.Thr3);
+  484   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Thr3);
+  485   2                              memcpy(SysParam.Lp_Param.s_SysParam.yuzhi3,temp,4);
+  486   2      
+  487   2                          Hs_ps.Time = DwordToSmall(Hs_ps.Time);
+  488   2                              sprintf(temp,"%04u",(unsigned int)Hs_ps.Time);
+  489   2                              memcpy(SysParam.Lp_Param.s_SysParam.PingHuaShiJian,temp,4);
+  490   2      
+  491   2                         
+  492   2                 //memcpy(SysParam.Lp_Param.s_SysParam.yuzhi1,wcm.yuzhi1,4);
+  493   2                 //memcpy(SysParam.Lp_Param.s_SysParam.yuzhi2,wcm.yuzhi2,4);
+  494   2                 //memcpy(SysParam.Lp_Param.s_SysParam.PingHuaShiJian,wcm.PingHuaShiJian,4);
+  495   2              
+  496   2                 #ifndef POE_SEN
+                                  //SysRunState.stParam.s_Jiaozhun.DI_C = SysRunState.stParam.s_SysParam.Canshu1;
+                                  //SysRunState.stParam.s_Jiaozhun.GAO_C = SysRunState.stParam.s_SysParam.Canshu2;
+                                  RefreshParam();
+                          #endif
+  501   2                 MCP4725_OutVol(MCP4725_S1_ADDR,SysParam.Lp_Param.s_SysParam.yuzhi1);
+  502   2                 break;
+  503   2              case 2:
+  504   2                  memcpy((u8*)&pd_thr,cdata,sizeof(SEND_PD_THR));
+  505   2                  SysParam.Pd_param.s_Thr.Det_Thr[0] = (WORD)DwordToSmall(pd_thr.Det_Thr[0]);
+  506   2                  SysParam.Pd_param.s_Thr.Det_Thr[1] = (WORD)DwordToSmall(pd_thr.Det_Thr[1]);
+  507   2                  SysParam.Pd_param.s_Thr.Det_Thr[2] = (WORD)DwordToSmall(pd_thr.Det_Thr[2]);
+  508   2                  SysParam.Pd_param.s_Thr.AnalogChannel = (WORD)DwordToSmall(pd_thr.AnalogChannel);
+  509   2                  break;
+  510   2          }
+  511   1         
+  512   1          SendData('W',NULL,0);
+  513   1          SaveParam();
+  514   1      }
+  515          
+  516          
+  517          
+  518          /*******************************************************************************
+  519          功能：写校准因子(M)响应
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 9   
 
-  520   2              SysParam.Lp_Param.s_Jiaozhun.GAO_B = FloatToSmall(Jzyz_w.GAO_B);
-  521   2              SysParam.Lp_Param.s_Jiaozhun.GAO_C = FloatToSmall(Jzyz_w.GAO_C);
-  522   2      
-  523   2              SendData('N',NULL,0);
-  524   2          }
-  525   1          SaveParam();
-  526   1          RefreshParam();
-  527   1      }
-  528          
-  529          /*******************************************************************************
-  530          功能： 读校准因子(J)响应
-  531          输入：unsigned char SensorType:传感器类型
-  532          输出：无
-  533          *******************************************************************************/
-  534          void ACK_CMD_J(void)
-  535          {
-  536   1          
-  537   1          SYS_JIAOZHUNYINZI Jzyz_r;
-  538   1          if(ProbeSwitch !=2)
-  539   1          {
-  540   2              Jzyz_r.DI_A = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.DI_A);
-  541   2              Jzyz_r.DI_B = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.DI_B);
-  542   2              Jzyz_r.DI_C = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.DI_C);
-  543   2              Jzyz_r.GAO_A = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.GAO_A);
-  544   2              Jzyz_r.GAO_B = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.GAO_B);
-  545   2              Jzyz_r.GAO_C = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.GAO_C);
-  546   2      
-  547   2              SendData('J',(u8*)&Jzyz_r,sizeof(SYS_JIAOZHUNYINZI));
-  548   2          }
-  549   1      }
-  550          
-  551          /*******************************************************************************
-  552          功能：读计数命令(V)响应
-  553          输入：unsigned char SensorType:传感器类型
-  554          输出：无
-  555          *******************************************************************************/
-  556          
-  557          void ACK_CMD_V(void)
-  558          {
-  559   1          STU_DOSERATE dr;
-  560   1          PD_DOSERATE Pd_dr;
-  561   1          switch(ProbeSwitch)
-  562   1          {
-  563   2              case 0: 
-  564   2                  dr.DoseRate = FloatToSmall(SysRunState.s_DoseMSG.DoseRate);
-  565   2                  dr.Dose     = FloatToSmall(SysRunState.s_DoseMSG.Dose);
-  566   2                  dr.State    = SysRunState.s_DoseMSG.State;
-  567   2      
-  568   2                  dr.PULSE1 = DwordToSmall(SysRunState.s_CPS.CPS1);
-  569   2                  dr.PULSE2 = DwordToSmall(SysRunState.s_CPS.CPS2);
-  570   2                  dr.PULSE3 = 0;
-  571   2      
-  572   2      //            #ifdef POE_SEN
-  573   2      //            if (SysRunState.RealRange == LOW_SEG)
-  574   2      //            {
-  575   2      //                dr.DoseRate *= SysParam.Lp_Param.CoCsRate;
-  576   2      //            }
-  577   2      //            #else
-  578   2      //           
-  579   2      //            #endif
-  580   2                  SendData('V',(u8*)&dr,sizeof(STU_DOSERATE));
-  581   2                  break;
-  582   2              case 1: 
-  583   2                  
-  584   2                  dr.DoseRate = FloatToSmall(SysRunState.s_DoseMSG.DoseRate);
-  585   2                  dr.Dose     = FloatToSmall(SysRunState.s_DoseMSG.Dose);
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 10  
+  520          输入：unsigned char SensorType:传感器类型
+  521          输出：无
+  522          *******************************************************************************/
+  523          void ACK_CMD_N(unsigned char *cdata)
+  524          {
+  525   1          SYS_JIAOZHUNYINZI Jzyz_w;   
+  526   1          if(ProbeSwitch !=2)
+  527   1          {
+  528   2              memcpy((u8*)&Jzyz_w,cdata,sizeof(SYS_JIAOZHUNYINZI));
+  529   2              SysParam.Lp_Param.s_Jiaozhun.DI_A = FloatToSmall(Jzyz_w.DI_A);
+  530   2              SysParam.Lp_Param.s_Jiaozhun.DI_B = FloatToSmall(Jzyz_w.DI_B);
+  531   2              SysParam.Lp_Param.s_Jiaozhun.DI_C = FloatToSmall(Jzyz_w.DI_C);
+  532   2              SysParam.Lp_Param.s_Jiaozhun.GAO_A = FloatToSmall(Jzyz_w.GAO_A);
+  533   2              SysParam.Lp_Param.s_Jiaozhun.GAO_B = FloatToSmall(Jzyz_w.GAO_B);
+  534   2              SysParam.Lp_Param.s_Jiaozhun.GAO_C = FloatToSmall(Jzyz_w.GAO_C);
+  535   2      
+  536   2              SendData('N',NULL,0);
+  537   2          }
+  538   1          SaveParam();
+  539   1          RefreshParam();
+  540   1      }
+  541          
+  542          /*******************************************************************************
+  543          功能： 读校准因子(J)响应
+  544          输入：unsigned char SensorType:传感器类型
+  545          输出：无
+  546          *******************************************************************************/
+  547          void ACK_CMD_J(void)
+  548          {
+  549   1          
+  550   1          SYS_JIAOZHUNYINZI Jzyz_r;
+  551   1          if(ProbeSwitch !=2)
+  552   1          {
+  553   2              Jzyz_r.DI_A = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.DI_A);
+  554   2              Jzyz_r.DI_B = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.DI_B);
+  555   2              Jzyz_r.DI_C = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.DI_C);
+  556   2              Jzyz_r.GAO_A = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.GAO_A);
+  557   2              Jzyz_r.GAO_B = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.GAO_B);
+  558   2              Jzyz_r.GAO_C = FloatToSmall(SysParam.Lp_Param.s_Jiaozhun.GAO_C);
+  559   2      
+  560   2              SendData('J',(u8*)&Jzyz_r,sizeof(SYS_JIAOZHUNYINZI));
+  561   2          }
+  562   1      }
+  563          
+  564          /*******************************************************************************
+  565          功能：读计数命令(V)响应
+  566          输入：unsigned char SensorType:传感器类型
+  567          输出：无
+  568          *******************************************************************************/
+  569          
+  570          void ACK_CMD_V(void)
+  571          {
+  572   1          STU_DOSERATE dr;
+  573   1          //PD_DOSERATE Pd_dr;
+  574   1          SEND_PD_DOSERATE Pd_dr;
+  575   1          switch(ProbeSwitch)
+  576   1          {
+  577   2              case 0: 
+  578   2                  dr.DoseRate = FloatToSmall(SysRunState.s_DoseMSG.DoseRate);
+  579   2                  dr.Dose     = FloatToSmall(SysRunState.s_DoseMSG.Dose);
+  580   2                  dr.State    = SysRunState.s_DoseMSG.State;
+  581   2      
+  582   2                  dr.PULSE1 = DwordToSmall(SysRunState.s_CPS.CPS1);
+  583   2                  dr.PULSE2 = DwordToSmall(SysRunState.s_CPS.CPS2);
+  584   2                  dr.PULSE3 = 0;
+  585   2      
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 10  
 
-  586   2                  dr.State    = SysRunState.s_DoseMSG.State;
-  587   2      
-  588   2                  dr.PULSE1 = DwordToSmall(SysRunState.s_CPS.CPS1);
-  589   2                  dr.PULSE2 = DwordToSmall(SysRunState.s_CPS.CPS2);
-  590   2                  dr.PULSE3 = 0;
-  591   2      
-  592   2      //            #ifdef POE_SEN
-  593   2      //            if (SysRunState.RealRange == LOW_SEG)
-  594   2      //            {
-  595   2      //                dr.DoseRate *= SysParam.Lp_Param.CoCsRate;
-  596   2      //            }
-  597   2      //            #else
-  598   2      //           
-  599   2      //            #endif
-  600   2                  SendData('V',(u8*)&dr,sizeof(STU_DOSERATE));
-  601   2                  break;
-  602   2              case 2: 
-  603   2                  
-  604   2                  Pd_dr.DoseRate  = FloatToSmall(SysParam.Pd_param.s_DoseRate.DoseRate);
-  605   2                  Pd_dr.DoseTotal = FloatToSmall(SysParam.Pd_param.s_DoseRate.DoseTotal);
-  606   2                  Pd_dr.DevSt     = SysParam.Pd_param.s_DoseRate.DevSt;
-  607   2                              
-  608   2      
-  609   2                  Pd_dr.Cps1 = FloatToSmall(SysParam.Pd_param.s_DoseRate.Cps1);
-  610   2                  Pd_dr.Cps2 = FloatToSmall(SysParam.Pd_param.s_DoseRate.Cps2);
-  611   2                  Pd_dr.Cps3 = FloatToSmall(SysParam.Pd_param.s_DoseRate.Cps3);
-  612   2                  SendData('V',(u8*)&Pd_dr,sizeof(PD_DOSERATE));
-  613   2                  break;
-  614   2          }
-  615   1      }
-  616          
-  617          /*******************************************************************************
-  618          功能：读计数命令(V)响应
-  619          输入：unsigned char SensorType:传感器类型
-  620          输出：无
-  621          *******************************************************************************/
-  622          void ACK_CMD_P(void)
-  623          {
-  624   1          char buf1[13],buf2[19];
-  625   1          switch(ProbeSwitch)
-  626   1          {
-  627   2              case 0: 
-  628   2                  sprintf(buf1,"%06ld",(long)SysRunState.s_CPS.CPS1);
-  629   2                  sprintf(&buf1[6],"%06ld",(long)SysRunState.s_CPS.CPS2);
-  630   2                  buf1[12] = SysRunState.s_CPS.State;
-  631   2      
-  632   2                  SendData('P',(u8*)buf1,13);
-  633   2                  break;
-  634   2              case 1:  
-  635   2                  sprintf(buf1,"%06ld",(long)SysRunState.s_CPS.CPS1);
-  636   2                  sprintf(&buf1[6],"%06ld",(long)SysRunState.s_CPS.CPS2);
-  637   2                  buf1[12] = SysRunState.s_CPS.State;
-  638   2      
-  639   2                  SendData('P',(u8*)buf1,13);
-  640   2                  break;
-  641   2              case 2:
-  642   2                  sprintf(buf2,"%06ld",(long)SysParam.Pd_param.s_DoseRate.Cps1);
-  643   2                  sprintf(&buf2[6],"%06ld",(long)SysParam.Pd_param.s_DoseRate.Cps2);
-  644   2                  sprintf(&buf2[12],"%06ld",(long)SysParam.Pd_param.s_DoseRate.Cps3);
-  645   2                  buf2[18] = SysParam.Pd_param.s_DoseRate.DevSt;
+  586   2      //            #ifdef POE_SEN
+  587   2      //            if (SysRunState.RealRange == LOW_SEG)
+  588   2      //            {
+  589   2      //                dr.DoseRate *= SysParam.Lp_Param.CoCsRate;
+  590   2      //            }
+  591   2      //            #else
+  592   2      //           
+  593   2      //            #endif
+  594   2                  SendData('V',(u8*)&dr,sizeof(STU_DOSERATE));
+  595   2                  break;
+  596   2              case 1: 
+  597   2                  
+  598   2                  dr.DoseRate = FloatToSmall(SysRunState.s_DoseMSG.DoseRate);
+  599   2                  dr.Dose     = FloatToSmall(SysRunState.s_DoseMSG.Dose);
+  600   2                  dr.State    = SysRunState.s_DoseMSG.State;
+  601   2      
+  602   2                  dr.PULSE1 = DwordToSmall(SysRunState.s_CPS.CPS1);
+  603   2                  dr.PULSE2 = DwordToSmall(SysRunState.s_CPS.CPS2);
+  604   2                  dr.PULSE3 = 0;
+  605   2      
+  606   2      //            #ifdef POE_SEN
+  607   2      //            if (SysRunState.RealRange == LOW_SEG)
+  608   2      //            {
+  609   2      //                dr.DoseRate *= SysParam.Lp_Param.CoCsRate;
+  610   2      //            }
+  611   2      //            #else
+  612   2      //           
+  613   2      //            #endif
+  614   2                  SendData('V',(u8*)&dr,sizeof(STU_DOSERATE));
+  615   2                  break;
+  616   2              case 2: 
+  617   2                  
+  618   2                  Pd_dr.DoseRate  = FloatToSmall(SysParam.Pd_param.s_DoseRate.DoseRate);
+  619   2                  Pd_dr.DoseTotal = FloatToSmall(SysParam.Pd_param.s_DoseRate.DoseTotal);
+  620   2                  Pd_dr.DevSt     = (BYTE)SysParam.Pd_param.s_DoseRate.DevSt;
+  621   2                              
+  622   2      
+  623   2                  Pd_dr.Cps1 = FloatToSmall(SysParam.Pd_param.s_DoseRate.Cps1);
+  624   2                  Pd_dr.Cps2 = FloatToSmall(SysParam.Pd_param.s_DoseRate.Cps2);
+  625   2                  Pd_dr.Cps3 = FloatToSmall(SysParam.Pd_param.s_DoseRate.Cps3);
+  626   2                  SendData('V',(u8*)&Pd_dr,sizeof(PD_DOSERATE));
+  627   2                  break;
+  628   2          }
+  629   1      }
+  630          
+  631          /*******************************************************************************
+  632          功能：读计数命令(V)响应
+  633          输入：unsigned char SensorType:传感器类型
+  634          输出：无
+  635          *******************************************************************************/
+  636          void ACK_CMD_P(void)
+  637          {
+  638   1          char buf1[13],buf2[19];
+  639   1          SEND_PD_DOSERATE Pd_dr;
+  640   1          switch(ProbeSwitch)
+  641   1          {
+  642   2              case 0: 
+  643   2                  sprintf(buf1,"%06ld",(long)SysRunState.s_CPS.CPS1);
+  644   2                  sprintf(&buf1[6],"%06ld",(long)SysRunState.s_CPS.CPS2);
+  645   2                  buf1[12] = SysRunState.s_CPS.State;
   646   2      
-  647   2                  SendData('P',(u8*)buf2,19);
+  647   2                  SendData('P',(u8*)buf1,13);
   648   2                  break;
-  649   2          }
-  650   1         
-  651   1      }
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 11  
+  649   2              case 1:  
+  650   2                  sprintf(buf1,"%06ld",(long)SysRunState.s_CPS.CPS1);
+  651   2                  sprintf(&buf1[6],"%06ld",(long)SysRunState.s_CPS.CPS2);
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 11  
 
-  652          
-  653          
-  654          
-  655          
-  656          /*******************************************************************************
-  657          功能：写报警参数命令(WF)响应
-  658          输入：unsigned char *pdata
-  659          输出：无
-  660          *******************************************************************************/
-  661          void ACK_CMD_B(u8 *cdata)
-  662          {
-  663   1          SYS_ALARM wal;   
-  664   1          PD_ALARM Pd_alm;
-  665   1          switch(ProbeSwitch)
-  666   1          {
-  667   2              case 0: 
-  668   2                   memcpy((u8*)&wal,cdata,sizeof(SYS_ALARM));
-  669   2      
-  670   2                  SysParam.Lp_Param.s_Alarm.DoseAlarm = FloatToSmall(wal.DoseAlarm);
-  671   2                  SysParam.Lp_Param.s_Alarm.DosePreAlarm = FloatToSmall(wal.DosePreAlarm);
-  672   2                  SysParam.Lp_Param.s_Alarm.DoseRateAlarm = FloatToSmall(wal.DoseRateAlarm);
-  673   2                  SysParam.Lp_Param.s_Alarm.DoseRatePreAlarm = FloatToSmall(wal.DoseRatePreAlarm);
-  674   2                  break;
-  675   2              case 1:  
-  676   2                  memcpy((u8*)&wal,cdata,sizeof(SYS_ALARM));
-  677   2      
-  678   2                  SysParam.Lp_Param.s_Alarm.DoseAlarm = FloatToSmall(wal.DoseAlarm);
-  679   2                  SysParam.Lp_Param.s_Alarm.DosePreAlarm = FloatToSmall(wal.DosePreAlarm);
-  680   2                  SysParam.Lp_Param.s_Alarm.DoseRateAlarm = FloatToSmall(wal.DoseRateAlarm);
-  681   2                  SysParam.Lp_Param.s_Alarm.DoseRatePreAlarm = FloatToSmall(wal.DoseRatePreAlarm);
-  682   2                  break;
-  683   2              case 2:
-  684   2                  memcpy((u8*)&Pd_alm,cdata,sizeof(PD_ALARM));
+  652   2                  buf1[12] = SysRunState.s_CPS.State;
+  653   2      
+  654   2                  SendData('P',(u8*)buf1,13);
+  655   2                  break;
+  656   2              case 2:
+  657   2                  Pd_dr.DevSt = (BYTE)SysParam.Pd_param.s_DoseRate.DevSt;
+  658   2                  sprintf(buf2,"%06ld",(long)SysParam.Pd_param.s_DoseRate.Cps1);
+  659   2                  sprintf(&buf2[6],"%06ld",(long)SysParam.Pd_param.s_DoseRate.Cps2);
+  660   2                  sprintf(&buf2[12],"%06ld",(long)SysParam.Pd_param.s_DoseRate.Cps3);
+  661   2                  buf2[18] = Pd_dr.DevSt;
+  662   2      
+  663   2                  SendData('P',(u8*)buf2,19);
+  664   2                  break;
+  665   2          }
+  666   1         
+  667   1      }
+  668          
+  669          
+  670          
+  671          
+  672          /*******************************************************************************
+  673          功能：写报警参数命令(WF)响应
+  674          输入：unsigned char *pdata
+  675          输出：无
+  676          *******************************************************************************/
+  677          void ACK_CMD_B(u8 *cdata)
+  678          {
+  679   1          SYS_ALARM wal;   
+  680   1          PD_ALARM Pd_alm;
+  681   1          switch(ProbeSwitch)
+  682   1          {
+  683   2              case 0: 
+  684   2                   memcpy((u8*)&wal,cdata,sizeof(SYS_ALARM));
   685   2      
-  686   2                  SysParam.Pd_param.s_Alarm.DoseAlarm = FloatToSmall(Pd_alm.DoseAlarm);
-  687   2                  SysParam.Pd_param.s_Alarm.DosePreAlarm = FloatToSmall(Pd_alm.DosePreAlarm);
-  688   2                  SysParam.Pd_param.s_Alarm.DoseRateAlarm = FloatToSmall(Pd_alm.DoseRateAlarm);
-  689   2                  SysParam.Pd_param.s_Alarm.DoseRatePreAlarm = FloatToSmall(Pd_alm.DoseRatePreAlarm);
+  686   2                  SysParam.Lp_Param.s_Alarm.DoseAlarm = FloatToSmall(wal.DoseAlarm);
+  687   2                  SysParam.Lp_Param.s_Alarm.DosePreAlarm = FloatToSmall(wal.DosePreAlarm);
+  688   2                  SysParam.Lp_Param.s_Alarm.DoseRateAlarm = FloatToSmall(wal.DoseRateAlarm);
+  689   2                  SysParam.Lp_Param.s_Alarm.DoseRatePreAlarm = FloatToSmall(wal.DoseRatePreAlarm);
   690   2                  break;
-  691   2          }  
-  692   1          SendData('B',NULL,0);
-  693   1          SaveParam();
-  694   1      } 
-  695          
-  696          
-  697          /*******************************************************************************
-  698          功能：读报警参数命令(F)响应
-  699          输入：无
-  700          输出：无
-  701          *******************************************************************************/
-  702          void ACK_CMD_F(void)
-  703          {
-  704   1          SYS_ALARM ral;
-  705   1          PD_ALARM Pd_ral;
-  706   1              switch(ProbeSwitch)
-  707   1              {
-  708   2                  case 0: 
-  709   2                      ral.DoseAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseAlarm);
-  710   2                      ral.DosePreAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DosePreAlarm);
-  711   2                      ral.DoseRateAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseRateAlarm);
-  712   2                      ral.DoseRatePreAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseRatePreAlarm);
-  713   2                      SendData('F',(u8*)&ral,sizeof(SYS_ALARM));
-  714   2                      break;
-  715   2                  case 1:  
-  716   2                      ral.DoseAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseAlarm);
-  717   2                      ral.DosePreAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DosePreAlarm);
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 12  
+  691   2              case 1:  
+  692   2                  memcpy((u8*)&wal,cdata,sizeof(SYS_ALARM));
+  693   2      
+  694   2                  SysParam.Lp_Param.s_Alarm.DoseAlarm = FloatToSmall(wal.DoseAlarm);
+  695   2                  SysParam.Lp_Param.s_Alarm.DosePreAlarm = FloatToSmall(wal.DosePreAlarm);
+  696   2                  SysParam.Lp_Param.s_Alarm.DoseRateAlarm = FloatToSmall(wal.DoseRateAlarm);
+  697   2                  SysParam.Lp_Param.s_Alarm.DoseRatePreAlarm = FloatToSmall(wal.DoseRatePreAlarm);
+  698   2                  break;
+  699   2              case 2:
+  700   2                  memcpy((u8*)&Pd_alm,cdata,sizeof(PD_ALARM));
+  701   2      
+  702   2                  SysParam.Pd_param.s_Alarm.DoseAlarm = FloatToSmall(Pd_alm.DoseAlarm);
+  703   2                  SysParam.Pd_param.s_Alarm.DosePreAlarm = FloatToSmall(Pd_alm.DosePreAlarm);
+  704   2                  SysParam.Pd_param.s_Alarm.DoseRateAlarm = FloatToSmall(Pd_alm.DoseRateAlarm);
+  705   2                  SysParam.Pd_param.s_Alarm.DoseRatePreAlarm = FloatToSmall(Pd_alm.DoseRatePreAlarm);
+  706   2                  break;
+  707   2          }  
+  708   1          SendData('B',NULL,0);
+  709   1          SaveParam();
+  710   1      } 
+  711          
+  712          
+  713          /*******************************************************************************
+  714          功能：读报警参数命令(F)响应
+  715          输入：无
+  716          输出：无
+  717          *******************************************************************************/
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 12  
 
-  718   2                      ral.DoseRateAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseRateAlarm);
-  719   2                      ral.DoseRatePreAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseRatePreAlarm);
-  720   2                      SendData('F',(u8*)&ral,sizeof(SYS_ALARM));
-  721   2                      break;
-  722   2                  case 2:
-  723   2                      Pd_ral.DoseAlarm=FloatToSmall(SysParam.Pd_param.s_Alarm.DoseAlarm);
-  724   2                      Pd_ral.DosePreAlarm=FloatToSmall(SysParam.Pd_param.s_Alarm.DosePreAlarm);
-  725   2                      Pd_ral.DoseRateAlarm=FloatToSmall(SysParam.Pd_param.s_Alarm.DoseRateAlarm);
-  726   2                      Pd_ral.DoseRatePreAlarm=FloatToSmall(SysParam.Pd_param.s_Alarm.DoseRatePreAlarm);
-  727   2                      SendData('F',(u8*)&Pd_ral,sizeof(PD_ALARM));
-  728   2                      break;
-  729   2              }
-  730   1      } 
-  731          
-  732          
-  733          /*******************************************************************************
-  734          功能：测温
-  735          输入：
-  736          输出：
-  737          *******************************************************************************/
-  738          void ACK_CMD_T(void)
-  739          {
-  740   1          SendData('T',NULL,0);
-  741   1      }
-  742          
-  743          /*******************************************************************************
-  744          功能：量程查询或者设置
-  745          输入：
-  746          输出：
-  747          *******************************************************************************/
-  748          void ACK_CMD_Q(u8 range)
-  749          {
-  750   1          if(ProbeSwitch == 0)
-  751   1          {
-  752   2              if (range == 1)
-  753   2              {
-  754   3                  SysRunState.RealRange = HIG_SEG;
-  755   3              }
-  756   2              else
-  757   2              {
-  758   3                  SysRunState.RealRange = LOW_SEG;
-  759   3              }
-  760   2          
-  761   2              //SendData('Q',(u8*)&SysRunState.range,1);
-  762   2              SendData('Q',NULL,0);
-  763   2          }
-  764   1      }
-  765          
-  766          /*******************************************************************************
-  767          功能：版本
-  768          输入：
-  769          输出：
-  770          *******************************************************************************/
-  771          void ACK_CMD_M(void)
-  772          {
-  773   1           SendData('M',(u8*)SysParam.VerSion,6);
-  774   1      }
-  775          
-  776          void ACK_CMD_WINFO(unsigned char *cdata)
-  777          {
-  778   1          SYS_GENERAL_INFO Dev_Winfo;  
-  779   1         
-  780   1          memcpy((u8*)&Dev_Winfo,cdata,sizeof(SYS_GENERAL_INFO)-1);
-  781   1          memcpy(SysParam.s_General_Info.Index,Dev_Winfo.Index,32);
-  782   1          memcpy(SysParam.s_General_Info.Location,Dev_Winfo.Location,32);
-  783   1          memcpy(SysParam.s_General_Info.Name,Dev_Winfo.Name,32);
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 13  
+  718          void ACK_CMD_F(void)
+  719          {
+  720   1          SYS_ALARM ral;
+  721   1          PD_ALARM Pd_ral;
+  722   1              switch(ProbeSwitch)
+  723   1              {
+  724   2                  case 0: 
+  725   2                      ral.DoseAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseAlarm);
+  726   2                      ral.DosePreAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DosePreAlarm);
+  727   2                      ral.DoseRateAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseRateAlarm);
+  728   2                      ral.DoseRatePreAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseRatePreAlarm);
+  729   2                      SendData('F',(u8*)&ral,sizeof(SYS_ALARM));
+  730   2                      break;
+  731   2                  case 1:  
+  732   2                      ral.DoseAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseAlarm);
+  733   2                      ral.DosePreAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DosePreAlarm);
+  734   2                      ral.DoseRateAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseRateAlarm);
+  735   2                      ral.DoseRatePreAlarm = FloatToSmall(SysParam.Lp_Param.s_Alarm.DoseRatePreAlarm);
+  736   2                      SendData('F',(u8*)&ral,sizeof(SYS_ALARM));
+  737   2                      break;
+  738   2                  case 2:
+  739   2                      Pd_ral.DoseAlarm=FloatToSmall(SysParam.Pd_param.s_Alarm.DoseAlarm);
+  740   2                      Pd_ral.DosePreAlarm=FloatToSmall(SysParam.Pd_param.s_Alarm.DosePreAlarm);
+  741   2                      Pd_ral.DoseRateAlarm=FloatToSmall(SysParam.Pd_param.s_Alarm.DoseRateAlarm);
+  742   2                      Pd_ral.DoseRatePreAlarm=FloatToSmall(SysParam.Pd_param.s_Alarm.DoseRatePreAlarm);
+  743   2                      SendData('F',(u8*)&Pd_ral,sizeof(PD_ALARM));
+  744   2                      break;
+  745   2              }
+  746   1      } 
+  747          
+  748          
+  749          /*******************************************************************************
+  750          功能：测温
+  751          输入：
+  752          输出：
+  753          *******************************************************************************/
+  754          void ACK_CMD_T(void)
+  755          {
+  756   1          SendData('T',NULL,0);
+  757   1      }
+  758          
+  759          /*******************************************************************************
+  760          功能：量程查询或者设置
+  761          输入：
+  762          输出：
+  763          *******************************************************************************/
+  764          void ACK_CMD_Q(u8 range)
+  765          {
+  766   1          if(ProbeSwitch == 0)
+  767   1          {
+  768   2              if (range == 1)
+  769   2              {
+  770   3                  SysRunState.RealRange = HIG_SEG;
+  771   3              }
+  772   2              else
+  773   2              {
+  774   3                  SysRunState.RealRange = LOW_SEG;
+  775   3              }
+  776   2          
+  777   2              //SendData('Q',(u8*)&SysRunState.range,1);
+  778   2              SendData('Q',NULL,0);
+  779   2          }
+  780   1      }
+  781          
+  782          /*******************************************************************************
+  783          功能：版本
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 13  
 
-  784   1          SendData(CMD_WRITE_INFO,NULL,0);
-  785   1          SaveParam();
-  786   1      }
-  787          
-  788          void ACK_CMD_RINFO()
-  789          {
-  790   1          SYS_GENERAL_INFO Dev_Rinfo;
-  791   1          memcpy(Dev_Rinfo.Index,SysParam.s_General_Info.Index,32);  
-  792   1          memcpy(Dev_Rinfo.Location,SysParam.s_General_Info.Location,32);  
-  793   1          memcpy(Dev_Rinfo.Name,SysParam.s_General_Info.Name,32); 
-  794   1          SendData(CMD_READ_INFO,(u8*)&Dev_Rinfo,sizeof(SYS_GENERAL_INFO)-1);
-  795   1      }
-  796          
-  797          
-  798          /*******************************************************************************
-  799          功能：电压
-  800          输入：
-  801          输出：
-  802          *******************************************************************************/
-  803          bool ReadBatVol()
-  804          {
-  805   1          BAT_INFO bi;
-  806   1          int Voltage = 0;
-  807   1          GetAds1110(I2C_BAT_VOL, ADS110_BAT_VOL);
-  808   1      
-  809   1          bi.Vol = (WORD)Voltage;
-  810   1          bi.Charging = (BAT_CHARGE() != 0);
-  811   1         SendData('G', (BYTE *)&bi, 3);
-  812   1          return true;
-  813   1      }
-  814          
-  815          
-  816          
-  817          
-  818          /*
-  819          函数名称:CheckSum
-  820          函数描述:校验和函数
-  821          输    入:数据、长度
-  822          输    出:校验结果
-  823          作    者:张红丽
-  824          日    期:2012.9.10
-  825          
-  826          */
-  827          unsigned char CheckSum(char *buf,int len)
-  828          {
-  829   1          //unsigned long Sum=0;
-  830   1          unsigned char verify=0;
-  831   1          unsigned int i=0;
-  832   1          for(i=0;i<len;i++)
-  833   1          {
-  834   2              verify+=*(buf+i);
-  835   2          }
-  836   1          //verify=(char)(Sum%256);
-  837   1          return verify;
-  838   1      }
-  839          
-  840          
+  784          输入：
+  785          输出：
+  786          *******************************************************************************/
+  787          void ACK_CMD_M(void)
+  788          {
+  789   1           SendData('M',(u8*)SysParam.VerSion,6);
+  790   1      }
+  791          
+  792          void ACK_CMD_WINFO(unsigned char *cdata)
+  793          {
+  794   1          SYS_GENERAL_INFO Dev_Winfo;  
+  795   1         
+  796   1          memcpy((u8*)&Dev_Winfo,cdata,sizeof(SYS_GENERAL_INFO)-1);
+  797   1          memcpy(SysParam.s_General_Info.Index,Dev_Winfo.Index,32);
+  798   1          memcpy(SysParam.s_General_Info.Location,Dev_Winfo.Location,32);
+  799   1          memcpy(SysParam.s_General_Info.Name,Dev_Winfo.Name,32);
+  800   1          SendData(CMD_WRITE_INFO,NULL,0);
+  801   1          SaveParam();
+  802   1      }
+  803          
+  804          void ACK_CMD_RINFO()
+  805          {
+  806   1          SYS_GENERAL_INFO Dev_Rinfo;
+  807   1          memcpy(Dev_Rinfo.Index,SysParam.s_General_Info.Index,32);  
+  808   1          memcpy(Dev_Rinfo.Location,SysParam.s_General_Info.Location,32);  
+  809   1          memcpy(Dev_Rinfo.Name,SysParam.s_General_Info.Name,32); 
+  810   1          SendData(CMD_READ_INFO,(u8*)&Dev_Rinfo,sizeof(SYS_GENERAL_INFO)-1);
+  811   1      }
+  812          
+  813          
+  814          /*******************************************************************************
+  815          功能：电压
+  816          输入：
+  817          输出：
+  818          *******************************************************************************/
+  819          bool ReadBatVol()
+  820          {
+  821   1          BAT_INFO bi;
+  822   1          int Voltage = 0;
+  823   1          GetAds1110(I2C_BAT_VOL, ADS110_BAT_VOL);
+  824   1      
+  825   1          bi.Vol = (WORD)Voltage;
+  826   1          bi.Charging = (BAT_CHARGE() != 0);
+  827   1         SendData('G', (BYTE *)&bi, 3);
+  828   1          return true;
+  829   1      }
+  830          
+  831          
+  832          
+  833          
+  834          /*
+  835          函数名称:CheckSum
+  836          函数描述:校验和函数
+  837          输    入:数据、长度
+  838          输    出:校验结果
+  839          作    者:张红丽
+  840          日    期:2012.9.10
   841          
+  842          */
+  843          unsigned char CheckSum(char *buf,int len)
+  844          {
+  845   1          //unsigned long Sum=0;
+  846   1          unsigned char verify=0;
+  847   1          unsigned int i=0;
+  848   1          for(i=0;i<len;i++)
+  849   1          {
+C251 COMPILER V5.60.0,  cmd                                                                28/02/25  09:05:19  PAGE 14  
+
+  850   2              verify+=*(buf+i);
+  851   2          }
+  852   1          //verify=(char)(Sum%256);
+  853   1          return verify;
+  854   1      }
+  855          
+  856          
+  857          
 
 
 Module Information          Static   Overlayable
 ------------------------------------------------
-  code size            =      6732     ------
+  code size            =      6772     ------
   ecode size           =    ------     ------
   data size            =    ------     ------
   idata size           =    ------     ------
   pdata size           =    ------     ------
-C251 COMPILER V5.60.0,  cmd                                                                12/11/24  14:59:46  PAGE 14  
-
   xdata size           =    ------     ------
   xdata-const size     =    ------     ------
-  edata size           =       865     ------
+  edata size           =       894     ------
   bit size             =    ------     ------
   ebit size            =    ------     ------
   bitaddressable size  =    ------     ------

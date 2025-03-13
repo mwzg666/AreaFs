@@ -7,6 +7,9 @@
 #define CMD_WRITE_NH   0xE2
 #define CMD_READ_FIX    0xE3
 #define CMD_WRITE_FIX   0xE4
+
+#define CMD_WRITE_TIME 0xE5
+
 #define CMD_READ_INFO   0xEE
 #define CMD_WRITE_INFO   0xEF
 
@@ -27,7 +30,9 @@ typedef struct
 
 void DataPro(u8 *cdata, u8 length);
 
-void ACK_CMD_C(void);//握手命令
+void ACK_CMD_C();//握手命令
+void ACK_CMD_TIME(unsigned char *cdata); //设置时间命名
+
 void ACK_CMD_H(u8 Address);//设置探测器地址
 
 

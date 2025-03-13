@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  Sensor                                                             12/11/24  14:59:46  PAGE 1   
+C251 COMPILER V5.60.0,  Sensor                                                             28/02/25  09:05:18  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE Sensor
@@ -66,7 +66,7 @@ stmt  level    source
    56          
    57          float parama,paramb,paramc,paramd;
    58          
-C251 COMPILER V5.60.0,  Sensor                                                             12/11/24  14:59:46  PAGE 2   
+C251 COMPILER V5.60.0,  Sensor                                                             28/02/25  09:05:18  PAGE 2   
 
    59          void SensorInit(void)
    60          {
@@ -134,7 +134,7 @@ stmt  level    source
   122   1              else                                            //8m
   123   1              {
   124   2                      parama = 59.4796602798306;
-C251 COMPILER V5.60.0,  Sensor                                                             12/11/24  14:59:46  PAGE 3   
+C251 COMPILER V5.60.0,  Sensor                                                             28/02/25  09:05:18  PAGE 3   
 
   125   2                      paramb = 0.303667994175407;
   126   2                      paramc = 6.68351922872401E-05;
@@ -202,7 +202,7 @@ stmt  level    source
   188   2          }
   189   1          else if (cps <= 11310.53)
   190   1          {
-C251 COMPILER V5.60.0,  Sensor                                                             12/11/24  14:59:46  PAGE 4   
+C251 COMPILER V5.60.0,  Sensor                                                             28/02/25  09:05:18  PAGE 4   
 
   191   2              parama = -211604.529633801;
   192   2              paramb = 35.7075232732049;
@@ -270,7 +270,7 @@ stmt  level    source
   253   1          return dr;
   254   1      }
   255          
-C251 COMPILER V5.60.0,  Sensor                                                             12/11/24  14:59:46  PAGE 5   
+C251 COMPILER V5.60.0,  Sensor                                                             28/02/25  09:05:18  PAGE 5   
 
   256          void CaptureSensorPluseCounter(void)
   257          {
@@ -338,7 +338,7 @@ stmt  level    source
   319   2                      {
   320   3                          SysRunState.s_DoseMSG.DoseRate = uSvh*SysParam.Lp_Param.s_SysParam.Canshu1;
   321   3                      }
-C251 COMPILER V5.60.0,  Sensor                                                             12/11/24  14:59:46  PAGE 6   
+C251 COMPILER V5.60.0,  Sensor                                                             28/02/25  09:05:18  PAGE 6   
 
   322   2                      else
   323   2                      {
@@ -406,7 +406,7 @@ stmt  level    source
   385   2              if(My_Doserate <= 100)
   386   2              {
   387   3                  RunStatus.Unit = Unit_uSv;
-C251 COMPILER V5.60.0,  Sensor                                                             12/11/24  14:59:46  PAGE 7   
+C251 COMPILER V5.60.0,  Sensor                                                             28/02/25  09:05:18  PAGE 7   
 
   388   3              }
   389   2              else
@@ -474,7 +474,7 @@ stmt  level    source
   451   1          if ( (me->s_DoseMSG.DoseRate >= SysParam.Lp_Param.s_Alarm.DoseRateAlarm)
   452   1              &&(SysParam.Lp_Param.s_Alarm.DoseRateAlarm > 0) ) 
   453   1          { 
-C251 COMPILER V5.60.0,  Sensor                                                             12/11/24  14:59:46  PAGE 8   
+C251 COMPILER V5.60.0,  Sensor                                                             28/02/25  09:05:18  PAGE 8   
 
   454   2              if((++me->DoseRateAlarmCnt) >= MIB_CST_DOSERATE_THRESHOLD_ALARM) 
   455   2              {   
@@ -542,7 +542,7 @@ stmt  level    source
   517   2          }
   518   1          
   519   1          me->s_CPS.State = me->s_DoseMSG.State;
-C251 COMPILER V5.60.0,  Sensor                                                             12/11/24  14:59:46  PAGE 9   
+C251 COMPILER V5.60.0,  Sensor                                                             28/02/25  09:05:18  PAGE 9   
 
   520   1          return true;
   521   1      }

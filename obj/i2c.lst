@@ -1,4 +1,4 @@
-C251 COMPILER V5.60.0,  i2c                                                                12/11/24  14:59:45  PAGE 1   
+C251 COMPILER V5.60.0,  i2c                                                                28/02/25  09:05:17  PAGE 1   
 
 
 C251 COMPILER V5.60.0, COMPILATION OF MODULE i2c
@@ -66,7 +66,7 @@ stmt  level    source
                        delay_us(I2C_DELAY);
                }
                
-C251 COMPILER V5.60.0,  i2c                                                                12/11/24  14:59:45  PAGE 2   
+C251 COMPILER V5.60.0,  i2c                                                                28/02/25  09:05:17  PAGE 2   
 
                void I2C_Ack()
                {
@@ -134,7 +134,7 @@ stmt  level    source
                                IOWrite(I2C_OUT,I2C_SCL_MASK,I2C_SCL_MASK);
                                delay_us(I2C_DELAY);
                        }
-C251 COMPILER V5.60.0,  i2c                                                                12/11/24  14:59:45  PAGE 3   
+C251 COMPILER V5.60.0,  i2c                                                                28/02/25  09:05:17  PAGE 3   
 
                
                        IOWrite(I2C_OUT, I2C_SCL_MASK,0);//this code is necesary
@@ -202,7 +202,7 @@ stmt  level    source
                        delay_us(5);
                        IOWrite(I2C_OUT,I2C_SCL_MASK,0);
                        delay_us(5);
-C251 COMPILER V5.60.0,  i2c                                                                12/11/24  14:59:45  PAGE 4   
+C251 COMPILER V5.60.0,  i2c                                                                28/02/25  09:05:17  PAGE 4   
 
                        
                    //ReleaseSDA();
